@@ -1,0 +1,2457 @@
+<!DOCTYPE html><html class=" js flexbox flexboxlegacy canvas canvastext webgl no-touch geolocation postmessage no-websqldatabase indexeddb hashchange history draganddrop websockets rgba hsla multiplebgs backgroundsize borderimage borderradius boxshadow textshadow opacity cssanimations csscolumns cssgradients cssreflections csstransforms csstransforms3d csstransitions fontface generatedcontent video audio localstorage sessionstorage webworkers no-applicationcache svg inlinesvg smil svgclippaths"><head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<meta name="description" content="">
+<meta name="author" content="">
+
+<title>Welcome to eProcurement - Tender Management System - Govt
+	of Andhra Pradesh</title>
+
+<link href="/resources/css/bootstrap.min.css" rel="stylesheet">
+<link href="/resources/css/style.css" type="text/css" rel="stylesheet">
+<link href="/resources/css/font-awesome.min.css" type="text/css" rel="stylesheet">
+<link href="/resources/css/navigation.css" type="text/css" rel="stylesheet">
+<link href="/resources/css/custom_popup.css" type="text/css" rel="stylesheet">
+<link href="/resources/css/grayCSS.css" type="text/css" rel="stylesheet">
+
+
+<script type="text/javascript">
+
+
+
+(function (window) {
+    {
+        var unknown = '-';
+
+       // browser
+        var nVer = navigator.appVersion;
+        var nAgt = navigator.userAgent;
+		//alert("nAgt : "+nAgt);
+        var browser = navigator.appName;
+        var version = '' + parseFloat(navigator.appVersion);
+        var majorVersion = parseInt(navigator.appVersion, 10);
+        var nameOffset, verOffset, ix;
+
+        // system
+        var os = unknown;
+        var clientStrings = [
+            {s:'Windows 10', r:/(Windows 10.0|Windows NT 10.0)/},
+            {s:'Windows 8.1', r:/(Windows 8.1|Windows NT 6.3)/},
+            {s:'Windows 8', r:/(Windows 8|Windows NT 6.2)/},
+            {s:'Windows 7', r:/(Windows 7|Windows NT 6.1)/},
+            {s:'Windows Vista', r:/Windows NT 6.0/},
+            {s:'Windows Server 2003', r:/Windows NT 5.2/},
+            {s:'Windows XP', r:/(Windows NT 5.1|Windows XP)/},
+            {s:'Windows 2000', r:/(Windows NT 5.0|Windows 2000)/},
+            {s:'Windows ME', r:/(Win 9x 4.90|Windows ME)/},
+            {s:'Windows 98', r:/(Windows 98|Win98)/},
+            {s:'Windows 95', r:/(Windows 95|Win95|Windows_95)/},
+            {s:'Windows NT 4.0', r:/(Windows NT 4.0|WinNT4.0|WinNT|Windows NT)/},
+            {s:'Windows CE', r:/Windows CE/},
+            {s:'Windows 3.11', r:/Win16/},
+            {s:'Android', r:/Android/},
+            {s:'Open BSD', r:/OpenBSD/},
+            {s:'Sun OS', r:/SunOS/},
+            {s:'Chrome OS', r:/CrOS/},
+            {s:'Linux', r:/(Linux|X11(?!.*CrOS))/},
+            {s:'iOS', r:/(iPhone|iPad|iPod)/},
+            {s:'Mac OS X', r:/Mac OS X/},
+            {s:'Mac OS', r:/(MacPPC|MacIntel|Mac_PowerPC|Macintosh)/},
+            {s:'QNX', r:/QNX/},
+            {s:'UNIX', r:/UNIX/},
+            {s:'BeOS', r:/BeOS/},
+            {s:'OS/2', r:/OS\/2/},
+            {s:'Search Bot', r:/(nuhk|Googlebot|Yammybot|Openbot|Slurp|MSNBot|Ask Jeeves\/Teoma|ia_archiver)/}
+        ];
+        for (var id in clientStrings) {
+            var cs = clientStrings[id];
+            if (cs.r.test(nAgt)) {
+                os = cs.s;
+                break;
+            }
+        }
+
+        var osVersion = unknown;
+
+        if (/Windows/.test(os)) {
+            osVersion = /Windows (.*)/.exec(os)[1];
+            os = 'Windows';
+        }
+
+        switch (os) {
+            case 'Mac OS X':
+                osVersion = /Mac OS X (10[\.\_\d]+)/.exec(nAgt)[1];
+                break;
+
+            case 'Android':
+                osVersion = /Android ([\.\_\d]+)/.exec(nAgt)[1];
+                break;
+
+            case 'iOS':
+                osVersion = /OS (\d+)_(\d+)_?(\d+)?/.exec(nVer);
+                osVersion = osVersion[1] + '.' + osVersion[2] + '.' + (osVersion[3] | 0);
+                break;
+        }
+      
+    }
+
+    window.jscd = {
+        os: os,
+        osVersion: osVersion,
+    };
+}(this));
+
+var osname=jscd.os;
+var osversiontest=jscd.osVersion ;
+	if('' == 'Windows'){
+	
+		if( parseFloat(osversiontest) < parseFloat('')){
+
+			if('' == '0'){
+				alert("This appliction will not be opened in "+osname+" - "+osversiontest+" version operating system after 5 days");
+				}else{
+
+					window.location.href = "osinfo.jsp?error=4"; 
+					}
+				
+			}
+	}
+
+		var invalidUser= '';
+		var emsignerVersion = "1.3";
+		function misReport(){  			
+		document.loginForm.action = "mis-reports.html";
+		document.loginForm.method = "POST";
+		document.loginForm.submit();
+		}  
+		
+	  function fnPreLogin(url)
+	  {
+		    document.loginForm.action = url;
+			document.loginForm.method = "POST";
+			document.loginForm.submit();
+	  }
+</script>
+
+
+
+<script type="text/javascript"> 
+  function misReport()
+	{
+	document.loginForm.action = "mis-reports.html";
+	document.loginForm.method = "POST";
+	document.loginForm.submit();
+	}
+  document.onkeydown = function(e) {
+		if(event.keyCode == 123) {
+			console.log("test");
+		return false;
+		}
+		if(e.ctrlKey && e.shiftKey && e.keyCode == 'I'.charCodeAt(0)){
+		return false;
+		}
+		if(e.ctrlKey && e.shiftKey && e.keyCode == 'J'.charCodeAt(0)){
+		return false;
+		}
+		if(e.ctrlKey && e.keyCode == 'U'.charCodeAt(0)){
+		return false;
+		}
+		}
+</script>
+
+<style type="text/css">
+.Button {
+	font-size: 12px;
+	color: #fff !important;
+	background: #25577a;
+	border: #fff solid 0px;
+	padding: 0px 20px 0px 20px;
+	cursor: hand;
+	margin-bottom: 2px;
+	margin-right: 3px;
+	height: 22px;
+}
+
+/* The customModal (background) */
+.customModal {
+	display: none; /* Hidden by default */
+	position: fixed; /* Stay in place */
+	z-index: 9999; /* Sit on top */
+	padding-top: 100px; /* Location of the box */
+	left: 0;
+	top: 0;
+	width: 100%; /* Full width */
+	height: 100%; /* Full height */
+	overflow: auto; /* Enable scroll if needed */
+	background-color: rgb(0, 0, 0); /* Fallback color */
+	background-color: rgba(0, 0, 0, 0.4); /* Black w/ opacity */
+}
+
+/* customModal Content */
+.customModal-content {
+	background-color: #fefefe;
+	margin: auto;
+	padding: 15px 25px;
+	border: 1px solid #888;
+	border-radius: 5px;
+	width: 40%;
+}
+
+.customModal-content h1 {
+	color: #0062cc;
+	font-size: 24px;
+	font-weight: 500;
+}
+
+.red {
+	color: #f00;
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.green {
+	color: #028a00;
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.yellow {
+	color: #afaf00;
+	font-size: 16px;
+	font-weight: 600;
+}
+
+.customModal-content p {
+	font-size: 14px;
+	font-weight: 500;
+}
+
+.btnModel {
+	float: right;
+	font-size: 14px;
+	font-weight: 500;
+	background: #0c447e;
+	padding: 5px 15px;
+	margin-right: 10px;
+	color: #fff;
+	border-radius: 3px;
+}
+
+.btnModel:hover, .btnModel:focus {
+	text-decoration: none;
+	cursor: pointer;
+	opacity: 0.7;
+}
+
+.footernav {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	align-content: center;
+}
+</style>
+
+<style>
+.client-panel {
+	width: 99%;
+	margin: 10px auto;
+	padding: 5px 5px;
+	border-radius: 10px;
+	box-shadow: 0px 1px 6px 2px rgb(183 181 181/ 30%);
+	border-radius: 10px;
+	position: relative;
+}
+
+/* Wrapping area */
+.logo-scroller-wrapper {
+	position: relative;
+}
+
+/* Logo scroller */
+.logo-scroller {
+	display: flex;
+	width: 98%;
+	margin: 10px auto;
+	gap: 10px;
+	overflow-x: auto;
+	scroll-behavior: smooth;
+	scrollbar-width: thin;
+	white-space: nowrap;
+}
+
+.logo-scroller::-webkit-scrollbar {
+	height: 5px;
+}
+
+.logo-scroller::-webkit-scrollbar-thumb {
+	background: #ccc;
+}
+
+/* Logo images */
+.logo-scroller a img {
+	border-radius: 10px;
+	transition: transform 0.3s ease, box-shadow 0.3s ease;
+	box-shadow: 0px 1px 3px 1px rgb(0 0 0/ 15%), 0 0 40px rgb(0 0 0/ 7%)
+		inset;
+	margin: 5px 5px;
+}
+
+.logo-scroller a img:hover {
+	transform: scale(1.05);
+}
+
+/* Navigation arrows */
+.nav-btn {
+	position: absolute;
+	top: 50%;
+	transform: translateY(-50%);
+	/* background: #f0c36d; */
+	color: #000000;
+	border: none;
+	padding: 0px 10px;
+	border-radius: 50%;
+	cursor: pointer;
+	font-size: 16px;
+	box-shadow: 0 3px 6px rgba(0, 0, 0, 0.2);
+	transition: background 0.3s;
+	z-index: 9999;
+}
+
+.nav-btn:hover {
+	background: #e0a84d;
+}
+
+.left-btn {
+	left: 0px;
+}
+
+.right-btn {
+	right: 0px;
+}
+
+/* Hide scrollbar (Chrome, Edge, Safari) */
+.logo-scroller::-webkit-scrollbar {
+	display: none;
+}
+
+/* Hide scrollbar (Firefox) */
+.logo-scroller {
+	scrollbar-width: none;
+}
+
+/* Hide buttons by default */
+.nav-btn {
+	opacity: 0;
+	pointer-events: none;
+	transition: opacity 0.3s ease;
+}
+
+/* Show buttons only when hovering the logo area */
+.logo-scroller-wrapper:hover .nav-btn {
+	opacity: 1;
+	pointer-events: auto;
+}
+</style>
+
+<style type="text/css">
+
+/* Container */
+.tender-widget {
+	border: 1px solid #e0e0e0;
+	border-radius: 12px;
+	padding: 10px 20px;
+	background-color: #ffffff;
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+	max-width: 700px;
+	margin: 10px auto;
+}
+
+/* Header */
+.tender-header {
+	display: flex;
+	justify-content: space-between;
+	flex-wrap: wrap;
+	margin-bottom: 5px;
+}
+
+.tender-header .label {
+	font-weight: 600;
+	color: #555;
+}
+
+.id-link, .bid-date .date {
+	font-weight: 500;
+	color: #1a73e8;
+	text-decoration: none;
+}
+
+.id-link:hover, .ifb-link:hover, .desc-link:hover {
+	text-decoration: underline;
+}
+
+/* Info Section */
+.tender-info {
+	display: flex;
+	flex-direction: column;
+	gap: 3px;
+}
+
+.ifb-no .label {
+	font-weight: 600;
+	color: #555;
+}
+
+.ifb-link, .desc-link {
+	color: #333;
+	font-weight: 500;
+	text-decoration: none;
+}
+
+/* Background strip for alternate emphasis */
+.bid-date {
+	background-color: #f1f3f4;
+	padding: 3px 10px;
+	border-radius: 6px;
+}
+
+/* Responsive */
+@media ( max-width : 600px) {
+	.tender-header {
+		flex-direction: column;
+		gap: 10px;
+	}
+}
+
+.bankLogos{
+	padding: 10px;
+}
+
+.bank-logo {
+    display: inline-block;
+    max-height: 40px;
+    margin: 0 10px;
+}
+
+</style>
+
+<!--<======================== this is for progress bar amaravathi unstoppable ========================================>-->
+<style>
+    /* Splash Screen */
+    .splash {
+      position: fixed;
+      inset: 0;
+      background-color: #fff2e1;
+      /* Light background */
+ 
+      display: flex;
+      justify-content: center;
+      align-items: center;
+ 
+      z-index: 9999;
+      overflow: hidden;
+ 
+      opacity: 1;
+      transform-origin: top center;
+      transform: perspective(1500px) rotateX(0deg);
+      transition: transform 0.8s cubic-bezier(0.645, 0.045, 0.355, 1), opacity 0.6s ease-in 0.2s;
+    }
+ 
+    /* Paper fold animation */
+    .splash.hide {
+      opacity: 0;
+      transform: perspective(1500px) rotateX(-90deg);
+      pointer-events: none;
+    }
+ 
+    /* Image */
+    .splash-img {
+      max-width: 90%;
+      max-height: 90%;
+      object-fit: contain;
+      animation: zoomIn 1s ease;
+    }
+ 
+    @keyframes zoomIn {
+      from {
+        transform: scale(0.95);
+        opacity: 0;
+      }
+ 
+      to {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+ 
+    /* Close Button */
+    .sp-close-btn {
+      position: absolute;
+  top: 15px;
+  right: 15px;
+
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+
+  width: 35px;
+  height: 35px;
+  border-radius: 50%;
+  cursor: pointer;
+
+  display: flex;
+  align-items: center;     /* vertical center */
+  justify-content: center; /* horizontal center */
+  
+    }
+ 
+    .sp-close-btn:hover {
+      background: rgba(0, 0, 0, 0.8);
+    }
+ 
+    /* Main content */
+    .content {
+      padding: 40px;
+    }
+ 
+    /* Progress Bar */
+    .sp-progress-container {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 6px;
+      background: rgba(0, 0, 0, 0.1);
+    }
+ 
+    .sp-progress-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(to right, #ffcb00, #ffcb00);
+      border-radius: 0 4px 4px 0;
+      /*box-shadow: 0 0 10px rgba(255, 65, 108, 0.5);*/
+    }
+</style>
+<script type="text/javascript" src="/resources/js/fusioncharts.charts.js?ver=2016"></script><style id="raphael-stylesheet-9" type="text/css" title="fusioncharts-raphael-stylesheet"></style></head>
+
+<body onclick="parent_disable();" onfocus="parent_disable();" oncontextmenu="return false;" onkeydown="searchKeyPress(event);">
+
+	<!-- Downloads PopupWindow Starts Here -->
+	<div id="light" class="white_content">
+		<table border="0" cellspacing="1" cellpadding="3" width="100%">
+			<tbody><tr>
+				<td><h4 class="modal-title" style="color: red; font-weight: 600;">Downloads - Department
+						User Creation Forms</h4></td>
+				<td align="right"><a href="javascript:void(0)" onclick="document.getElementById('light').style.display='none';document.getElementById('fade').style.display='none'"><button type="button" class="close" data-dismiss="modal" aria-hidden="true">X</button></a></td>
+
+			</tr>
+		</tbody></table>
+
+		<br>
+
+		<table class="popUPTable">
+			<tbody><tr>
+				<th width="5%" align="center"><span class="textHead">S.No</span></th>
+				<th width="85%"><span class="textHead">Type of Format</span></th>
+				<th width="10%" align="center"><span class="textHead">Download</span></th>
+			</tr>
+			<tr>
+				<td><span>1</span></td>
+				<td><span class="Title" style="color: red;">User
+						Acceptance &amp; Workflow Configuration Form</span><br> For new user
+					registration of departments please download the "User
+					Acceptance Form", Workflow Configuration Submit to the <a href="mailto:pm_eproc_itc[at]ap[dot]gov[dot]in">PM
+						E-Procurement</a></td>
+				<td><a href="resources/downloads/DEF_UserAcceptance-WorkflowConfiguration.pdf" target="_blank"> <img src="/resources/img/btnDownloadButton.gif" title="Download" class="img-responsive">
+				</a></td>
+			</tr>
+		</tbody></table>
+
+	</div>
+	<div id="fade" class="black_overlay"></div>
+	<!-- Downloads PopupWindow Ends Here -->
+
+	<!-- Downloads PopupWindow Starts Here -->
+	<div id="lightTwo" class="white_content">
+		<table border="0" cellspacing="1" cellpadding="3" width="100%">
+			<tbody><tr>
+				<td><h4 class="modal-title" style="color: red; font-weight: 600;">Downloads - Bidder
+						Request Forms</h4></td>
+				<td align="right"><a href="javascript:void(0)" onclick="document.getElementById('lightTwo').style.display='none';document.getElementById('fade').style.display='none'"><button type="button" class="close" data-dismiss="modal" aria-hidden="true">X</button></a></td>
+			</tr>
+		</tbody></table>
+		<br>
+
+		<table class="popUPTable">
+			<tbody><tr>
+				<th width="5%"><span class="textHead">S.No</span></th>
+				<th width="85%"><span class="textHead">Type of Format </span></th>
+				<th width="10%"><span class="textHead">Download</span></th>
+			</tr>
+			<tr>
+				<td>1</td>
+				<td><span class="Title" style="color: red;">Registered
+						Company updation</span> <br> Download &amp; fill the form with
+					necessary details and submit to the PM, eProcurement Office for
+					approval along with related proofs.</td>
+				<td><a href="resources/downloads/URF_APeProcurementCompanyNameUpdationForm.pdf" target="_blank"> <img src="/resources/img/btnDownloadButton.gif" title="Download" class="img-responsive">
+				</a></td>
+			</tr>
+			<tr>
+				<td>2</td>
+				<td><span class="Title" style="color: red;">Forget User
+						ID </span><br> Download &amp; fill the form with necessary details
+					and submit to the <a href="mailto:pm_eproc_itc[at]ap[dot]gov[dot]in">PM
+						E-Procurement</a> along with related proofs.</td>
+				<td><a href="resources/downloads/URF_ForgotUserID.pdf" target="_blank"> <img src="/resources/img/btnDownloadButton.gif" title="Download" class="img-responsive">
+				</a></td>
+			</tr>
+			<tr>
+				<td>3</td>
+				<td><span class="Title" style="color: red;">New User ID
+						- Activation Form </span><br> Download &amp; fill the form with
+					necessary details and submit to the <a href="mailto:pm_eproc_itc[at]ap[dot]gov[dot]in">PM
+						E-Procurement</a> along with related proofs.</td>
+				<td><a href="resources/downloads/URF_NewUserIDActivation.pdf" target="_blank"> <img src="/resources/img/btnDownloadButton.gif" title="Download" class="img-responsive">
+				</a></td>
+			</tr>
+			<tr>
+				<td>4</td>
+				<td><span class="Title" style="color: red;">PAN Number
+						Updation</span> <br> Download &amp; fill the form with necessary
+					details and submit to the <a href="mailto:pm_eproc_itc[at]ap[dot]gov[dot]in">PM
+						E-Procurement</a> along with related proofs.</td>
+				<td><a href="resources/downloads/URF_PANNumberUpdation.pdf" target="_blank"> <img src="/resources/img/btnDownloadButton.gif" title="Download" class="img-responsive">
+				</a></td>
+			</tr>
+			<tr>
+				<td>5</td>
+				<td><span class="Title" style="color: red;">Registration
+						Number Updation </span><br> Download &amp; fill the form with
+					necessary details and submit to the <a href="mailto:pm_eproc_itc[at]ap[dot]gov[dot]in">PM
+						E-Procurement</a> along with related proofs.</td>
+				<td><a href="resources/downloads/URF_RegistrationNumberUpdation.pdf" target="_blank"> <img src="/resources/img/btnDownloadButton.gif" title="Download" class="img-responsive">
+				</a></td>
+			</tr>
+		</tbody></table>
+
+	</div>
+	<div id="fade" class="black_overlay"></div>
+	<!-- Downloads PopupWindow Ends Here -->
+
+
+	<!-- homePage Banner PopupWindow Starts Here -->
+	
+	<!-- homePage Banner PopupWindow Ends Here -->
+
+
+	<!-- homePage PopupWindow Starts Here -->
+	<!-- <div id="ModalBackgroundDiv"
+		style="position: absolute; top: 0px; left: 0px; background-color: black; z-index: 100; opacity: 0.8; filter: alpha(opacity =  60); -moz-opacity: 0.8; overflow: hidden; display: none"></div>
+
+
+	<div id="myModal" class="modal fade">
+		<div class="modal-dialog">
+			<div class="modal-content">
+				<div class="modal-header">
+					<button type="button" class="close" data-dismiss="modal"
+						aria-hidden="true">X</button>
+					<h4 class="modal-title" style="color: red; font-weight: 600;">IMPORTANT
+						NOTE</h4>
+				</div>
+				<div class="modal-body">
+					<p class="Title" style="color: red;">
+						<strong>IMPORTANT NOTE TO SUPPLIERS AND CONTRACTORS:</strong>
+					</p>
+
+					<p>
+						1. If you are an existing user of Old E-Procurement portal, you
+						may log-in using your existing username, password and digital
+						certificate of to log-in into new E-Procurement portal. However,
+						in-order to submit bid in new portal it is mandatory to use Class
+						3 Digital certificate <span class="Title"
+							style="color: red; font-weight: 600;">CONTAINING SIGN-IN
+							AND ENCRYPTION CERTIFICATES</span> mandatorily which is issued by any
+						CA. Please note that any changes to your profile in this new
+						portal will not affect to your profile in Old E-Procurement
+						portal.
+					</p>
+					<p>
+						2. All your experience certificates and other documents have been
+						copied to new platform and hence you need not upload them again. <span
+							style="font-weight: bold; text-decoration: underline;">However,
+							if you are attaching any previously uploaded documents from
+							Common Folder for any tender, pls. read the important Note in the
+							Documents Library page regarding Upload of Documents before
+							submitting the Bid.</span>
+					</p>
+					<p>3. If you are a new user, you may register in the portal by
+						clicking on "Register" link on the home page.</p>
+
+					<p class="Title" style="color: red;">
+						<strong>IMPORTANT NOTE TO DEPARTMENT OFFICERS:</strong>
+					</p>
+
+					<p>1. If you are an existing user of Old E-Procurement portal,
+						you may log-in using your existing username, password and digital
+						certificate to log-in to new E-Procurement portal.</p>
+					<p>2. Please note that there is no standard log-in in new
+						E-Procurement Portal. It is mandatory for all officers to posess a
+						digital signing certificate to log-in to new E-Procurement
+						system&nbsp;</p>
+					<p>3. As per the Security Standards and Guidelines, there
+						should be minimum 2 decryptors (officers with Encryption
+						Certificate) in the workflow/ process.</p>
+					<p>4. We request you &nbsp;to procure additional digital
+						certificates to avoid delays if any while publishing tenders.</p>
+
+				</div>
+			</div>
+		</div>
+	</div> -->
+	<!-- homePage PopupWindow Ends Here -->
+
+	<form id="loginForm" name="loginForm" onkeypress="loginKeyPress(event);" action="null" method="post" onsubmit="return formclick()">
+
+		<!-- pageTop Bar Starts Here -->
+		<div class="container-fluid tsFooterDown">
+			<div class="row tsFooterDown" id="myDIV-1">
+
+				<div class="col-lg-4 col-md-6 col-sm-6">
+
+					<div class="footer-social-icons">
+						<ul class="social-icons">
+							<li><a href="#" class="social-icon"> <i class="fa fa-facebook"></i></a></li>
+							<li><a href="#" class="social-icon"> <i class="fa fa-twitter"></i></a></li>
+							<li><a href="#" class="social-icon"> <i class="fa fa-youtube"></i></a></li>
+						</ul>
+					</div>
+
+				</div>
+				<div class="col-lg-4 col-md-6 col-sm-6 titleText"></div>
+				<div class="col-lg-4 col-md-6 col-sm-6">
+
+					<!-- <div class="skipText">
+						<a href="#skipContentBox" style=""> Skip to
+							Content</a>
+					</div> -->
+
+					<div class="dflex socialright">
+						<div class="btn-group">
+							<a href="#" class="btn2" title="" onclick="fnPreLogin('screenReader.html')"><i class="fa fa-wheelchair faWheelChair"> </i></a> <a href="#" class="decrease btn2" title="Decrease font size"><i class="fa fa-font size1"> <i class="fa fa-minus minus">
+								</i>
+							</i></a> <a href="#" class="resetMe btn2" title="Default font size"><i class="fa fa-font size1"> </i></a> <a href="#" class="increase btn2" title="Increase font size"><i class="fa fa-font size1">
+									<i class="fa fa-plus plus"> </i>
+							</i></a> <a href="#" class="white btn2" onclick="btnGrayScale()"><i class="fa fa-font size1"> </i></a> <a href="#" class="whiteR btn2" onclick="btnNormalScale()"><i class="fa fa-font size1">
+							</i></a>
+						</div>
+
+					</div>
+				</div>
+			</div>
+		</div>
+		<!-- pageTop Bar Ends Here -->
+
+
+		<div class="homePageHeader">
+			<div>
+				<img src="/resources/img/banner-left.png" title="Welcome to AP E-Procurement Portal - Govt of Andhra Pradesh" alt="Welcome to AP E-Procurement Portal - Govt of Andhra Pradesh" id="tsHeaderImg">
+			</div>
+			<div>
+				<img src="/resources/img/banner-center.png" title="Welcome to AP E-Procurement Portal - Govt of Andhra Pradesh" alt="Welcome to AP E-Procurement Portal - Govt of Andhra Pradesh" id="tsHeaderImg">
+			</div>
+			<div>
+				<img src="/resources/img/banner-right.png" title="Welcome to AP E-Procurement Portal - Govt of Andhra Pradesh" alt="Welcome to AP E-Procurement Portal - Govt of Andhra Pradesh" id="tsHeaderImg">
+			</div>
+		</div>
+
+		
+
+		<!-- Header Ends Here -->
+
+		<!-- Navigation Starts Here -->
+		<nav class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+			<div class="container-fluid">
+
+				<div class="collapse navbar-collapse" id="cssmenu">
+					<ul class="nav navbar-nav">
+
+						<!-- <li><a href="#"
+							onclick="fnPreLogin('readreversefeed.html')">Reverse Feed
+								</a></li> -->
+						<li><a href="login.html">Home</a></li>
+						<li><a href="#" onclick="fnPreLogin('eprocurement-guidelines.html')">Guidelines</a></li>
+						<li><a href="#" onclick="misReport()">MIS Reports</a></li>
+						<li><a href="#" onclick="fnPreLogin('news-government-orders.html')">GO's</a></li>
+						<li class="dropdown-submenuu"><a href="#">FAQs <span class="caret"></span></a>
+							<ul class="dropdown-menuu">
+								<li><a href="#" onclick="fnPreLogin('faqs.html')">General</a></li>
+								<li><a href="#" onclick="fnPreLogin('contractors-faqs.html')">Contractors</a></li>
+								<li><a href="#" onclick="fnPreLogin('departments-faqs.html')">Departments</a></li>
+							</ul></li>
+						<li><a href="#" onclick="fnPreLogin('downloads.html')">Downloads</a></li>
+						<li><a href="#" onclick="fnPreLogin('feedback-suggestions.html')">Feedback/
+								Suggestions</a></li>
+						<li><a href="#" onclick="fnPreLogin('helpdesk.html')" class="blink blinkTxt">Support Desk</a></li>
+					</ul>
+				</div>
+			</div>
+		</nav>
+		<!-- Navigation Ends Here -->
+
+
+		<div class="container-fluid">
+			<div class="row">
+
+				<div class="col-md-12 ticker">
+					<div class="ticker-caption">
+						<span>Important Alerts !</span>
+					</div>
+					<div class="ticker-container">
+						<marquee behavior="scroll" direction="left" scrollamount="5" class="newsMarquee">
+							
+						</marquee>
+					</div>
+				</div>
+			</div>
+
+			<div class="row">
+				<div class="col-md-3 p0">
+
+					<!-- Tenders Starts Here -->
+					<div class="panel panel-resp panel-warning">
+
+						<div class="panel-heading">
+							<img alt="" src="/resources/img/ico-tender.svg">
+							&nbsp; Tenders
+						</div>
+
+						<!--  -->
+						<div class="pt510">
+							<span class="lbltender">Tenders by:</span> <a href="#" id="count" class="tenderBy"> Count </a> <a href="#" id="value" class="tenderBy"> Value </a>
+						</div>
+
+						<div class="valstyle">
+							<div id="columnChartForTenders"><span id="chartobject-1" class="fusioncharts-container" style="position: relative; text-align: left; line-height: normal; display: inline-block; zoom: 1; font-weight: normal; font-variant: normal; font-style: normal; text-decoration: none; padding: 0px; margin: 0px; border-width: medium; border-style: none; border-color: currentcolor; border-image: initial; direction: ltr; width: 300px; height: 230px;"><svg height="230" version="1.1" width="300" xmlns="http://www.w3.org/2000/svg" id="raphael-paper-10" style="overflow: hidden; -webkit-tap-highlight-color: rgba(0, 0, 0, 0); user-select: none; cursor: default; position: relative; left: -0.5px; top: -0.625px; background-color: rgb(255, 255, 255);"><desc>Column Chart with caption "Tenders Published"</desc><defs><clipPath id="56B208B8-CF9D-4D71-95DD-1C00C9099F2E"><rect x="60" y="39" width="225" height="130" transform="matrix(1,0,0,1,0,0)"></rect></clipPath></defs><g class="raphael-group-11-background"><rect x="0" y="0" width="300" height="230" stroke="none" fill-opacity="0.5" fill="#ffffff" rx="0" ry="0" style="stroke: none; fill-opacity: 0.5; fill: rgb(255, 255, 255);"></rect><rect x="0" y="0" width="300" height="230" stroke="#767575" stroke-opacity="0.5" stroke-width="0" stroke-dasharray="none" fill="none" rx="0" ry="0" style="stroke: rgb(118, 117, 117); stroke-opacity: 0.5; fill: none;"></rect></g><g class="raphael-group-18-canvas"><rect x="60" y="39" width="225" height="130" rx="0" ry="0" stroke-width="0" stroke="#545454" stroke-opacity="1" stroke-linejoin="miter" fill="none" style="stroke: rgb(84, 84, 84); stroke-opacity: 1; stroke-linejoin: miter; fill: none;"></rect><rect x="60" y="39" width="225" height="130" rx="0" ry="0" stroke-width="0" stroke="none" fill-opacity="1" fill="#ffffff" style="stroke: none; fill-opacity: 1; fill: rgb(255, 255, 255);"></rect></g><g class="raphael-group-21-axisbottom"><g class="raphael-group-24-x-axis-bands"></g><g class="raphael-group-30-y-axis-bands"><rect x="60" y="117" width="225" height="26" fill-opacity="0" fill="#eeeeee" stroke-width="0" rx="0" ry="0" stroke="#000000" style="fill-opacity: 0; fill: rgb(238, 238, 238); stroke: rgb(0, 0, 0);"></rect><rect x="60" y="65" width="225" height="26" fill-opacity="0" fill="#eeeeee" stroke-width="0" rx="0" ry="0" stroke="#000000" style="fill-opacity: 0; fill: rgb(238, 238, 238); stroke: rgb(0, 0, 0);"></rect></g><g class="raphael-group-36-y-axis-bands"></g><g class="raphael-group-26-x-axis-lines"></g><g class="raphael-group-32-y-axis-lines"><path d="M60,143.5L285,143.5" stroke="#999999" stroke-opacity="1" stroke-width="1" stroke-dasharray="1,2" fill="none" shape-rendering="crispEdges" style="stroke: rgb(153, 153, 153); stroke-opacity: 1; fill: none; shape-rendering: crispedges;"></path><path d="M60,117.5L285,117.5" stroke="#999999" stroke-opacity="1" stroke-width="1" stroke-dasharray="1,2" fill="none" shape-rendering="crispEdges" style="stroke: rgb(153, 153, 153); stroke-opacity: 1; fill: none; shape-rendering: crispedges;"></path><path d="M60,91.5L285,91.5" stroke="#999999" stroke-opacity="1" stroke-width="1" stroke-dasharray="1,2" fill="none" shape-rendering="crispEdges" style="stroke: rgb(153, 153, 153); stroke-opacity: 1; fill: none; shape-rendering: crispedges;"></path><path d="M60,65.5L285,65.5" stroke="#999999" stroke-opacity="1" stroke-width="1" stroke-dasharray="1,2" fill="none" shape-rendering="crispEdges" style="stroke: rgb(153, 153, 153); stroke-opacity: 1; fill: none; shape-rendering: crispedges;"></path><path d="M60,39.5L285,39.5" stroke="#999999" stroke-opacity="1" stroke-width="1" stroke-dasharray="1,2" fill="none" shape-rendering="crispEdges" style="stroke: rgb(153, 153, 153); stroke-opacity: 1; fill: none; shape-rendering: crispedges;"></path></g><g class="raphael-group-38-y-axis-lines"></g><g class="fusioncharts-xaxis-0-gridlabels" style=""><text class="fusioncharts-label" fill-opacity="1" fill="#333333" x="76.07142857142857" y="174" text-anchor="middle" transform="matrix(1,0,0,1,0,0)" stroke="none" style="fill-opacity: 1; fill: rgb(51, 51, 51); text-anchor: middle; stroke: none; font-family: &quot;Helvetica Neue&quot;, Arial; font-size: 10px; font-weight: normal; font-style: normal;" font-family="Helvetica Neue,Arial" font-size="10px" font-weight="normal" font-style="normal"><tspan dy="9.5" x="76.07142857142857">2026-</tspan><tspan dy="12" x="76.07142857142857">27</tspan></text><text class="fusioncharts-label" fill-opacity="1" fill="#333333" x="108.21428571428572" y="174" text-anchor="middle" transform="matrix(1,0,0,1,0,0)" stroke="none" style="fill-opacity: 1; fill: rgb(51, 51, 51); text-anchor: middle; stroke: none; font-family: &quot;Helvetica Neue&quot;, Arial; font-size: 10px; font-weight: normal; font-style: normal;" font-family="Helvetica Neue,Arial" font-size="10px" font-weight="normal" font-style="normal"><tspan dy="9.5" x="108.21428571428572">2025-</tspan><tspan dy="12" x="108.21428571428572">26</tspan></text><text class="fusioncharts-label" fill-opacity="1" fill="#333333" x="140.35714285714286" y="174" text-anchor="middle" transform="matrix(1,0,0,1,0,0)" stroke="none" style="fill-opacity: 1; fill: rgb(51, 51, 51); text-anchor: middle; stroke: none; font-family: &quot;Helvetica Neue&quot;, Arial; font-size: 10px; font-weight: normal; font-style: normal;" font-family="Helvetica Neue,Arial" font-size="10px" font-weight="normal" font-style="normal"><tspan dy="9.5" x="140.35714285714286">2024-</tspan><tspan dy="12" x="140.35714285714286">25</tspan></text><text class="fusioncharts-label" fill-opacity="1" fill="#333333" x="172.5" y="174" text-anchor="middle" transform="matrix(1,0,0,1,0,0)" stroke="none" style="fill-opacity: 1; fill: rgb(51, 51, 51); text-anchor: middle; stroke: none; font-family: &quot;Helvetica Neue&quot;, Arial; font-size: 10px; font-weight: normal; font-style: normal;" font-family="Helvetica Neue,Arial" font-size="10px" font-weight="normal" font-style="normal"><tspan dy="9.5" x="172.5">2023-</tspan><tspan dy="12" x="172.5">24</tspan></text><text class="fusioncharts-label" fill-opacity="1" fill="#333333" x="204.64285714285717" y="174" text-anchor="middle" transform="matrix(1,0,0,1,0,0)" stroke="none" style="fill-opacity: 1; fill: rgb(51, 51, 51); text-anchor: middle; stroke: none; font-family: &quot;Helvetica Neue&quot;, Arial; font-size: 10px; font-weight: normal; font-style: normal;" font-family="Helvetica Neue,Arial" font-size="10px" font-weight="normal" font-style="normal"><tspan dy="9.5" x="204.64285714285717">2022-</tspan><tspan dy="12" x="204.64285714285717">23</tspan></text><text class="fusioncharts-label" fill-opacity="1" fill="#333333" x="236.7857142857143" y="174" text-anchor="middle" transform="matrix(1,0,0,1,0,0)" stroke="none" style="fill-opacity: 1; fill: rgb(51, 51, 51); text-anchor: middle; stroke: none; font-family: &quot;Helvetica Neue&quot;, Arial; font-size: 10px; font-weight: normal; font-style: normal;" font-family="Helvetica Neue,Arial" font-size="10px" font-weight="normal" font-style="normal"><tspan dy="9.5" x="236.7857142857143">2021-</tspan><tspan dy="12" x="236.7857142857143">22</tspan></text><text class="fusioncharts-label" fill-opacity="1" fill="#333333" x="268.92857142857144" y="174" text-anchor="middle" transform="matrix(1,0,0,1,0,0)" stroke="none" style="fill-opacity: 1; fill: rgb(51, 51, 51); text-anchor: middle; stroke: none; font-family: &quot;Helvetica Neue&quot;, Arial; font-size: 10px; font-weight: normal; font-style: normal;" font-family="Helvetica Neue,Arial" font-size="10px" font-weight="normal" font-style="normal"><tspan dy="9.5" x="268.92857142857144">2020-</tspan><tspan dy="12" x="268.92857142857144">21</tspan></text></g><g class="fusioncharts-yaxis-0-gridlabels" style=""><text class="fusioncharts-label" fill="#333333" x="54" y="169" text-anchor="end" transform="matrix(1,0,0,1,0,0)" stroke="none" style="fill: rgb(51, 51, 51); text-anchor: end; stroke: none; font-family: &quot;Helvetica Neue&quot;, Arial; font-size: 10px;" font-family="Helvetica Neue,Arial" font-size="10px" font-weight="undefined" font-style="undefined"><tspan dy="3.5" x="54">0</tspan></text><text class="fusioncharts-label" fill="#333333" x="54" y="143" text-anchor="end" transform="matrix(1,0,0,1,0,0)" stroke="none" style="fill: rgb(51, 51, 51); text-anchor: end; stroke: none; font-family: &quot;Helvetica Neue&quot;, Arial; font-size: 10px;" font-family="Helvetica Neue,Arial" font-size="10px" font-weight="undefined" font-style="undefined"><tspan dy="3.5" x="54">18K</tspan></text><text class="fusioncharts-label" fill="#333333" x="54" y="117" text-anchor="end" transform="matrix(1,0,0,1,0,0)" stroke="none" style="fill: rgb(51, 51, 51); text-anchor: end; stroke: none; font-family: &quot;Helvetica Neue&quot;, Arial; font-size: 10px;" font-family="Helvetica Neue,Arial" font-size="10px" font-weight="undefined" font-style="undefined"><tspan dy="3.5" x="54">36K</tspan></text><text class="fusioncharts-label" fill="#333333" x="54" y="91" text-anchor="end" transform="matrix(1,0,0,1,0,0)" stroke="none" style="fill: rgb(51, 51, 51); text-anchor: end; stroke: none; font-family: &quot;Helvetica Neue&quot;, Arial; font-size: 10px;" font-family="Helvetica Neue,Arial" font-size="10px" font-weight="undefined" font-style="undefined"><tspan dy="3.5" x="54">54K</tspan></text><text class="fusioncharts-label" fill="#333333" x="54" y="65" text-anchor="end" transform="matrix(1,0,0,1,0,0)" stroke="none" style="fill: rgb(51, 51, 51); text-anchor: end; stroke: none; font-family: &quot;Helvetica Neue&quot;, Arial; font-size: 10px;" font-family="Helvetica Neue,Arial" font-size="10px" font-weight="undefined" font-style="undefined"><tspan dy="3.5" x="54">72K</tspan></text><text class="fusioncharts-label" fill="#333333" x="54" y="39" text-anchor="end" transform="matrix(1,0,0,1,0,0)" stroke="none" style="fill: rgb(51, 51, 51); text-anchor: end; stroke: none; font-family: &quot;Helvetica Neue&quot;, Arial; font-size: 10px;" font-family="Helvetica Neue,Arial" font-size="10px" font-weight="undefined" font-style="undefined"><tspan dy="3.5" x="54">90K</tspan></text></g><g class="fusioncharts-yaxis-1-gridlabels" style=""></g><g class="raphael-group-41-axis-name"><text class="fusioncharts-yaxis-0-title" x="0" y="0" fill-opacity="1" fill="#333333" text-anchor="middle" style="fill-opacity: 1; fill: rgb(51, 51, 51); text-anchor: middle; font-size: 10px; stroke: none;" transform="matrix(0,-1,1,0,17,104)" font-size="10px" stroke="none"><tspan dy="9.5" x="0">No of Tenders</tspan></text><text class="fusioncharts-xaxis-0-title" x="0" y="0" fill-opacity="1" fill="#333333" text-anchor="middle" transform="matrix(1,0,0,1,172.5,203)" font-size="10px" stroke="none" style="fill-opacity: 1; fill: rgb(51, 51, 51); text-anchor: middle; font-size: 10px; stroke: none;"><tspan dy="9.5" x="0">Year</tspan></text></g><g class="raphael-group-64-axis-lines"><path d="M60,169.5L285,169.5" stroke="#999999" stroke-opacity="1" stroke-width="1" fill="none" style="stroke: rgb(153, 153, 153); stroke-opacity: 1; fill: none;"></path></g></g><g class="raphael-group-12-dataset"><g class="raphael-group-67-columns" clip-path="url('#56B208B8-CF9D-4D71-95DD-1C00C9099F2E')" style=""><rect x="63" y="142" width="26" height="28" rx="0" ry="0" fill-opacity="1" fill="#0266b4" stroke="#333333" stroke-opacity="1" stroke-width="0" stroke-dasharray="none" stroke-linejoin="miter" style="fill-opacity: 1; fill: rgb(2, 102, 180); stroke: rgb(51, 51, 51); stroke-opacity: 1; stroke-linejoin: miter;"></rect><rect x="95" y="72" width="26" height="98" rx="0" ry="0" fill-opacity="1" fill="#008e46" stroke="#333333" stroke-opacity="1" stroke-width="0" stroke-dasharray="none" stroke-linejoin="miter" style="fill-opacity: 1; fill: rgb(0, 142, 70); stroke: rgb(51, 51, 51); stroke-opacity: 1; stroke-linejoin: miter;"></rect><rect x="128" y="104" width="25" height="66" rx="0" ry="0" fill-opacity="1" fill="#fd7f18" stroke="#333333" stroke-opacity="1" stroke-width="0" stroke-dasharray="none" stroke-linejoin="miter" style="fill-opacity: 1; fill: rgb(253, 127, 24); stroke: rgb(51, 51, 51); stroke-opacity: 1; stroke-linejoin: miter;"></rect><rect x="160" y="42" width="25" height="128" rx="0" ry="0" fill-opacity="1" fill="#003402" stroke="#333333" stroke-opacity="1" stroke-width="0" stroke-dasharray="none" stroke-linejoin="miter" style="fill-opacity: 1; fill: rgb(0, 52, 2); stroke: rgb(51, 51, 51); stroke-opacity: 1; stroke-linejoin: miter;"></rect><rect x="192" y="58" width="26" height="112" rx="0" ry="0" fill-opacity="1" fill="#7e00e8" stroke="#333333" stroke-opacity="1" stroke-width="0" stroke-dasharray="none" stroke-linejoin="miter" style="fill-opacity: 1; fill: rgb(126, 0, 232); stroke: rgb(51, 51, 51); stroke-opacity: 1; stroke-linejoin: miter;"></rect><rect x="224" y="70" width="26" height="100" rx="0" ry="0" fill-opacity="1" fill="#0266b4" stroke="#333333" stroke-opacity="1" stroke-width="0" stroke-dasharray="none" stroke-linejoin="miter" style="fill-opacity: 1; fill: rgb(2, 102, 180); stroke: rgb(51, 51, 51); stroke-opacity: 1; stroke-linejoin: miter;"></rect><rect x="256" y="96" width="26" height="74" rx="0" ry="0" fill-opacity="1" fill="#008e46" stroke="#333333" stroke-opacity="1" stroke-width="0" stroke-dasharray="none" stroke-linejoin="miter" style="fill-opacity: 1; fill: rgb(0, 142, 70); stroke: rgb(51, 51, 51); stroke-opacity: 1; stroke-linejoin: miter;"></rect></g></g><g class="raphael-group-22-axistop"><g class="raphael-group-23-x-axis-bands"></g><g class="raphael-group-29-y-axis-bands"></g><g class="raphael-group-35-y-axis-bands"></g><g class="raphael-group-25-x-axis-lines"></g><g class="raphael-group-31-y-axis-lines"></g><g class="raphael-group-37-y-axis-lines"></g><g class="fusioncharts-xaxis-0-gridlabels" style=""></g><g class="fusioncharts-yaxis-0-gridlabels" style=""></g><g class="fusioncharts-yaxis-1-gridlabels" style=""></g></g><g class="fusioncharts-datalabels" transform="matrix(1,0,0,1,0,0)" style=""><text class="fusioncharts-label" x="76" y="120" fill-opacity="1" fill="#ffffff" font-size="10px" stroke="none" text-anchor="middle" style="fill-opacity: 1; fill: rgb(255, 255, 255); font-size: 10px; stroke: none; text-anchor: middle;" transform="matrix(0,-1,1,0,-43.4004,196.5996)"><tspan dy="4" x="76">18.67K</tspan></text><text class="fusioncharts-label" x="108" y="94" fill-opacity="1" fill="#ffffff" font-size="10px" stroke="none" text-anchor="middle" style="fill-opacity: 1; fill: rgb(255, 255, 255); font-size: 10px; stroke: none; text-anchor: middle;" transform="matrix(0,-1,1,0,14.5996,202.5996)"><tspan dy="4" x="108">66.83K</tspan></text><text class="fusioncharts-label" x="140.5" y="126" fill-opacity="1" fill="#ffffff" font-size="10px" stroke="none" text-anchor="middle" style="fill-opacity: 1; fill: rgb(255, 255, 255); font-size: 10px; stroke: none; text-anchor: middle;" transform="matrix(0,-1,1,0,14.5996,266.5996)"><tspan dy="4" x="140.5">44.98K</tspan></text><text class="fusioncharts-label" x="172.5" y="64" fill-opacity="1" fill="#ffffff" font-size="10px" stroke="none" text-anchor="middle" style="fill-opacity: 1; fill: rgb(255, 255, 255); font-size: 10px; stroke: none; text-anchor: middle;" transform="matrix(0,-1,1,0,109.0996,237.0996)"><tspan dy="4" x="172.5">87.82K</tspan></text><text class="fusioncharts-label" x="205" y="80" fill-opacity="1" fill="#ffffff" font-size="10px" stroke="none" text-anchor="middle" style="fill-opacity: 1; fill: rgb(255, 255, 255); font-size: 10px; stroke: none; text-anchor: middle;" transform="matrix(0,-1,1,0,125.5996,285.5996)"><tspan dy="4" x="205">76.53K</tspan></text><text class="fusioncharts-label" x="237" y="92" fill-opacity="1" fill="#ffffff" font-size="10px" stroke="none" text-anchor="middle" style="fill-opacity: 1; fill: rgb(255, 255, 255); font-size: 10px; stroke: none; text-anchor: middle;" transform="matrix(0,-1,1,0,145.5996,329.5996)"><tspan dy="4" x="237">68.84K</tspan></text><text class="fusioncharts-label" x="269" y="118" fill-opacity="1" fill="#ffffff" font-size="10px" stroke="none" text-anchor="middle" style="fill-opacity: 1; fill: rgb(255, 255, 255); font-size: 10px; stroke: none; text-anchor: middle;" transform="matrix(0,-1,1,0,151.5996,387.5996)"><tspan dy="4" x="269">50.44K</tspan></text></g><g class="raphael-group-89-caption"><text class="fusioncharts-caption" fill="#333333" x="172.5" y="15" text-anchor="middle" stroke="none" style="fill: rgb(51, 51, 51); text-anchor: middle; stroke: none; font-family: &quot;Helvetica Neue&quot;, Arial; font-size: 12px; font-weight: bold;" font-family="Helvetica Neue,Arial" font-size="12px" font-weight="bold"><tspan dy="11.199999809265137" x="172.5">Tenders Published</tspan></text></g><g class="raphael-group-13-hot"><g class="raphael-group-66-col-hot"><rect x="63" y="142" width="26" height="28" rx="0" ry="0" stroke="#c0c0c0" stroke-opacity="0.000001" stroke-width="0" fill-opacity="0.000001" fill="#c0c0c0" style="stroke: rgb(192, 192, 192); stroke-opacity: 1e-06; fill-opacity: 1e-06; fill: rgb(192, 192, 192);"></rect><rect x="95" y="72" width="26" height="98" rx="0" ry="0" stroke="#c0c0c0" stroke-opacity="0.000001" stroke-width="0" fill-opacity="0.000001" fill="#c0c0c0" style="stroke: rgb(192, 192, 192); stroke-opacity: 1e-06; fill-opacity: 1e-06; fill: rgb(192, 192, 192);"></rect><rect x="128" y="104" width="25" height="66" rx="0" ry="0" stroke="#c0c0c0" stroke-opacity="0.000001" stroke-width="0" fill-opacity="0.000001" fill="#c0c0c0" style="stroke: rgb(192, 192, 192); stroke-opacity: 1e-06; fill-opacity: 1e-06; fill: rgb(192, 192, 192);"></rect><rect x="160" y="42" width="25" height="128" rx="0" ry="0" stroke="#c0c0c0" stroke-opacity="0.000001" stroke-width="0" fill-opacity="0.000001" fill="#c0c0c0" style="stroke: rgb(192, 192, 192); stroke-opacity: 1e-06; fill-opacity: 1e-06; fill: rgb(192, 192, 192);"></rect><rect x="192" y="58" width="26" height="112" rx="0" ry="0" stroke="#c0c0c0" stroke-opacity="0.000001" stroke-width="0" fill-opacity="0.000001" fill="#c0c0c0" style="stroke: rgb(192, 192, 192); stroke-opacity: 1e-06; fill-opacity: 1e-06; fill: rgb(192, 192, 192);"></rect><rect x="224" y="70" width="26" height="100" rx="0" ry="0" stroke="#c0c0c0" stroke-opacity="0.000001" stroke-width="0" fill-opacity="0.000001" fill="#c0c0c0" style="stroke: rgb(192, 192, 192); stroke-opacity: 1e-06; fill-opacity: 1e-06; fill: rgb(192, 192, 192);"></rect><rect x="256" y="96" width="26" height="74" rx="0" ry="0" stroke="#c0c0c0" stroke-opacity="0.000001" stroke-width="0" fill-opacity="0.000001" fill="#c0c0c0" style="stroke: rgb(192, 192, 192); stroke-opacity: 1e-06; fill-opacity: 1e-06; fill: rgb(192, 192, 192);"></rect></g></g><g class="raphael-group-16-buttons"></g></svg></span></div>
+							<div id="columnChartForTendersValue" style="display: none;"></div>
+						</div>
+						<!--  -->
+
+						<!-- <div class="panel-heading">
+							<i class="fa fa-file-text"></i> &nbsp;Tenders
+						</div>
+						
+						<div class="bgtcor" style="padding: 5px;">
+							<a href="#">Graph based on Tender Value</a>
+							<a href="javascript:toggleyearTenders();"
+								id="columnChartContainer"> Graph based on Tenders </a>
+								<a href="#" id="chartContainer1" onclick="chartContainer('chartContainer1')" > Graph based on Tenders Value</a>
+
+							<div id="columnChartForTenders" style="display: block;"></div>
+							<div id="columnChartForTendersValue" style="display: none;"></div>
+						</div> -->
+						<!-- <div class="panel-heading">Department</div>
+						/.panel-heading
+						<div class="bgtcor" style="padding: 5px;">
+							<a href="javascript:toggleyearDepartment();"
+								id="pieChartContainer"> Graph based on Department </a>
+							<div id="pieChartForDepartmentTenders" style="display: block;"></div>
+							<div id="pieChartForDepartmentTendersValue"
+								style="display: none;"></div> -->
+						
+						<!-- </div> -->
+						<!-- /.panel-body -->
+					</div>
+					<!-- Districts Wise Tenders Ends Here -->
+
+					<!-- Active Tenders -->
+					<div class="panel panel-resp panel-warning p0m0 mtb5">
+						<!-- <div class="panel-heading">
+							<i class="fa fa-file-text"></i>&nbsp;&nbsp;&nbsp;Tenders
+						</div> -->
+						<div class="panel-body bgrer p0">
+							<div class="">
+								<!-- conterFlip Starts Here -->
+								<div class="counterDiv br">
+									<div class="conterFlip">
+										<div class="conterFlipHeading">
+											<span class="count-text1">Active Tenders</span>
+										</div>
+										<a href="#" class="viewCurrentalltabs" id="viewCurrentallid" title="Active Tenders"><div class="do-splitflap"><div class="splitflap" style="position: relative; width: 80px; height: 40px;"><div class="char" style="transform-style: preserve-3d; position: absolute; left: 0px; top: 0px;"><div class="upper" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); background-position: -40px 0px;"></div><div class="lower" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); background-position: -40px -20px;"></div><div class="flipping" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); position: absolute; left: 0px; top: 20px; z-index: 4; transform: rotateX(4.22682deg); transform-origin: center top 0px; background-position: -40px -20px; display: none;"></div></div><div class="char" style="transform-style: preserve-3d; position: absolute; left: 20px; top: 0px;"><div class="upper" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); background-position: -60px 0px;"></div><div class="lower" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); background-position: -60px -20px;"></div><div class="flipping" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); position: absolute; left: 0px; top: 20px; z-index: 9; transform: rotateX(8.83814deg); transform-origin: center top 0px; background-position: -60px -20px; display: none;"></div></div><div class="char" style="transform-style: preserve-3d; position: absolute; left: 40px; top: 0px;"><div class="upper" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); background-position: -80px 0px;"></div><div class="lower" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); background-position: -80px -20px;"></div><div class="flipping" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); position: absolute; left: 0px; top: 20px; z-index: 7; transform: rotateX(7.1806deg); transform-origin: center top 0px; background-position: -80px -20px; display: none;"></div></div><div class="char" style="transform-style: preserve-3d; position: absolute; left: 60px; top: 0px;"><div class="upper" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); background-position: 0px 0px;"></div><div class="lower" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); background-position: 0px -20px;"></div><div class="flipping" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); position: absolute; left: 0px; top: 20px; z-index: 4; transform: rotateX(3.91344deg); transform-origin: center top 0px; background-position: 0px -20px; display: none;"></div></div></div></div></a>
+
+									</div>
+									<div class="conterFlip">
+										
+										
+										<input type="hidden" name="hdnCurrDate" id="hdnCurrDate" value="13/07/2026">
+										<div class="conterFlipHeading">
+											<span class="count-text2">Closing Today</span>
+										</div>
+										<a href="#" class="viewClosingTender" title="Tenders Closing Today"><div class="do-splitflap"><div class="splitflap" style="position: relative; width: 60px; height: 40px;"><div class="char" style="transform-style: preserve-3d; position: absolute; left: 0px; top: 0px;"><div class="upper" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); background-position: -100px 0px;"></div><div class="lower" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); background-position: -100px -20px;"></div><div class="flipping" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); position: absolute; left: 0px; top: 20px; z-index: 1; transform: rotateX(1.3026deg); transform-origin: center top 0px; background-position: -100px -20px; display: none;"></div></div><div class="char" style="transform-style: preserve-3d; position: absolute; left: 20px; top: 0px;"><div class="upper" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); background-position: -20px 0px;"></div><div class="lower" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); background-position: -20px -20px;"></div><div class="flipping" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); position: absolute; left: 0px; top: 20px; z-index: 7; transform: rotateX(6.93503deg); transform-origin: center top 0px; background-position: -20px -20px; display: none;"></div></div><div class="char" style="transform-style: preserve-3d; position: absolute; left: 40px; top: 0px;"><div class="upper" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); background-position: 0px 0px;"></div><div class="lower" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); background-position: 0px -20px;"></div><div class="flipping" style="width: 20px; height: 20px; background-image: url(&quot;resources/img/chars.png&quot;); position: absolute; left: 0px; top: 20px; z-index: 1; transform: rotateX(1.42453deg); transform-origin: center top 0px; background-position: 0px -20px; display: none;"></div></div></div></div></a>
+
+									</div>
+								</div>
+								<!-- conterFlip Ends Here -->
+							</div>
+						</div>
+					</div>
+					<!-- Active Tenders -->
+
+					<div class="panel panel-resp panel-warning noShadow">
+						<div class="panel-heading">
+							<img alt="" src="/resources/img/ico-userlogin.svg">
+							&nbsp; <a href="#" onclick="fnPreLogin('blocked-suppliers.html')">Blocked
+								Suppliers</a>
+						</div>
+					</div>
+
+					<!-- Banking Partners -->
+					<div class="panel panel-resp panel-warning">
+						<div class="panel-heading">
+							<img alt="" src="/resources/img/ico-banking.svg">
+							&nbsp; Banking Partners
+						</div>
+						<div class="panel-body">
+							<div class="col-md-12">
+
+								<div class="text-center bankLogos">
+								    <img src="/resources/img/icici-bank.png" class="bank-logo" id="icici">
+								
+								    <img src="/resources/img/axisbank.png" class="bank-logo" id="axis">
+								
+								    <img src="/resources/img/dbs-logo.png" class="bank-logo" id="dbs">
+								</div>
+
+
+							</div>
+						</div>
+					</div>
+					<!-- Banking Partners -->
+
+					
+
+					
+
+				</div>
+
+
+				<div class="clear-fix"></div>
+				<div class="col-md-6">
+
+					<!-- IMP Message Starts Here -->
+					<!-- <div class="panel panel-danger">
+
+						<div class="panel-body">
+
+							<span class="tDesc myBlink"> IMPORTANT NOTE TO DEPARTMENT
+								OFFICERS: </span> <br> <span class="tDesc red">All the <strong>TIA
+									(Department officers)</strong> are requested to refund the unsuccessful
+								<strong>EMDs</strong> for Online payments made wherever Tenders
+								are finalized. The Refund facility is already provided to the
+								concerned <strong>TIA (Department officers)</strong> through a
+								Link on the platform.
+							</span><br> <span class="tDesc">For any assistance pls.
+								contact <strong><a href="helpdesk.html" class="black">HelpDesk</a></strong>.
+							</span>
+							<p class="tDesc"></p>
+						</div>
+
+					</div> -->
+					<!-- IMP Message Here -->
+
+					<!-- Welcome Starts Here -->
+					<!-- <div class="panel panel-danger">
+						<div class="panel-heading">
+							<span class="myBlinkTitle"> Welcome to Government of
+								Andhra Pradesh eProcurement Platform </span>
+						</div>
+						<div class="panel-body">
+
+							<span class="tDesc">Government of <strong>Andhra Pradesh</strong> has
+								always been at the forefront of implementing <strong>e-Governance</strong>,
+								having pioneered popular projects like <strong>CARD</strong>, <strong>eSeva</strong>, <strong>Mee Seva</strong>,
+								<strong>E-Procurement</strong>. To take the evolution of E-Procurement to the
+								next level, it is felt essential to have a comprehensive,
+								elaborated new E-Procurement solution for providing better
+								services to citizens and businesses. &nbsp; <a
+								href="about-apeProcurement.html">read more</a>
+							</span>
+							<p class="tDesc"></p>
+						</div>
+					</div> -->
+					<!-- Welcome Ends Here -->
+
+
+
+
+					<!-- tabContainer Starts Here -->
+					<div class="tabContainer mt10" id="skipContentBox">
+						<input id="tab1" type="radio" name="tabs" checked=""> <label for="tab1"><span>Current Tenders</span></label> <input id="tab2" type="radio" name="tabs"> <label for="tab2"><span>Corrigendums</span></label>
+						<input id="tab3" type="radio" name="tabs"> <label for="tab3"><span>Upcoming Tenders</span></label>
+
+						<section id="content1" class="tab-content">
+							<!--  -->
+							<div class="more">
+								<a href="#" class="viewCurrentalltabs" id="viewCurrentall">More...</a>
+							</div>
+
+							<!--  -->
+
+							<!-- <div class="tender-widget">
+
+								    <div class="tender-header">
+								        <div class="tender-id">
+								            <span class="label">Tender ID:</span>
+								            <a href="#" onclick="viewtender(14144)" class="id-link" title="(Service Percentage tender)">109849</a>
+								        </div>
+								        <div class="bid-date">
+								            <span class="label">Bid Closing Date:</span>
+								            <span class="date">31/01/2026 12:01 PM</span>
+								        </div>
+								    </div>
+								
+								    <div class="tender-info">
+								        <div class="ifb-no">
+								            <span class="label">IFB No/Tender No:</span>
+								            <a href="#" onclick="viewtender(14144)" class="ifb-link">Service Percentage tender</a>
+								        </div>
+								        <div class="description">
+								            <a href="#" onclick="viewtender(14144)" class="desc-link">
+								                Service Percentage tender in Division No: Vijayawada.
+								            </a>
+								        </div>
+								    </div>
+								
+								</div> -->
+
+							<!--  -->
+
+							
+								<div class="samer">
+
+									<div class="col-lg-12 row p0">
+
+										<div class="col-lg-6 row p0">
+											<span class="tHead">&nbsp;Tender ID:</span> &nbsp;<a href="#" onclick="viewtender(827395)" class="coli-id" title="(IALA)">960180</a>
+										</div>
+
+										<div class="col-lg-6 row rer">
+											<span class="tHead bgStrip">Bid Closing Date:</span> &nbsp;<span class="coli-date">27/07/2026 03:00 PM
+											</span>
+										</div>
+
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<span class="tHead">IFB No/Tender No:</span> &nbsp;<a href="#" onclick="viewtender(827395)" class="coli-tno">34/CE(N)/APIIC/2026-27, Dated: 10.07.2026</a>
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<a href="#" onclick="viewtender(827395)" class="tDesc">IALA in Division
+											No:Chief Engineer, APIIC Ltd, Mangalagiri. </a>
+									</div>
+
+								</div>
+							
+								<div class="samer">
+
+									<div class="col-lg-12 row p0">
+
+										<div class="col-lg-6 row p0">
+											<span class="tHead">&nbsp;Tender ID:</span> &nbsp;<a href="#" onclick="viewtender(827392)" class="coli-id" title="(CC ROAD AND DRAIN)">960177</a>
+										</div>
+
+										<div class="col-lg-6 row rer">
+											<span class="tHead bgStrip">Bid Closing Date:</span> &nbsp;<span class="coli-date">27/07/2026 03:00 PM
+											</span>
+										</div>
+
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<span class="tHead">IFB No/Tender No:</span> &nbsp;<a href="#" onclick="viewtender(827392)" class="coli-tno">33/CE(N)/APIIC/2026-27, Dated: 10.07.2026</a>
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<a href="#" onclick="viewtender(827392)" class="tDesc">CC ROAD AND DRAIN in Division
+											No:Chief Engineer, APIIC Ltd, Mangalagiri. </a>
+									</div>
+
+								</div>
+							
+								<div class="samer">
+
+									<div class="col-lg-12 row p0">
+
+										<div class="col-lg-6 row p0">
+											<span class="tHead">&nbsp;Tender ID:</span> &nbsp;<a href="#" onclick="viewtender(827390)" class="coli-id" title="(MSME)">960175</a>
+										</div>
+
+										<div class="col-lg-6 row rer">
+											<span class="tHead bgStrip">Bid Closing Date:</span> &nbsp;<span class="coli-date">27/07/2026 03:00 PM
+											</span>
+										</div>
+
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<span class="tHead">IFB No/Tender No:</span> &nbsp;<a href="#" onclick="viewtender(827390)" class="coli-tno">26/CE(S)/APIIC/2026-27, Dated:08.07.2026</a>
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<a href="#" onclick="viewtender(827390)" class="tDesc">MSME in Division
+											No:Chief Engineer Office -A. </a>
+									</div>
+
+								</div>
+							
+								<div class="samer">
+
+									<div class="col-lg-12 row p0">
+
+										<div class="col-lg-6 row p0">
+											<span class="tHead">&nbsp;Tender ID:</span> &nbsp;<a href="#" onclick="viewtender(827371)" class="coli-id" title="(Supply of purified drinking water bottles and Water cans to Sri Sowmyanatha Swamy Temple, Nandalur &amp; Sri Chennakesava Swamy Group of Temples, Thallapaka in Annamaiah District during Annual Brahmotsavams for the year 2026.)">960156</a>
+										</div>
+
+										<div class="col-lg-6 row rer">
+											<span class="tHead bgStrip">Bid Closing Date:</span> &nbsp;<span class="coli-date">17/07/2026 03:00 PM
+											</span>
+										</div>
+
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<span class="tHead">IFB No/Tender No:</span> &nbsp;<a href="#" onclick="viewtender(827371)" class="coli-tno">58/EE-XI/TTD/2026-27</a>
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<a href="#" onclick="viewtender(827371)" class="tDesc">Supply of purified drinking water bottles and Water cans to Sri Sowmyanatha Swamy Temple, Nandalur &amp; Sri Chennakesava Swamy Group of Temples, Thallapaka in Annamaiah District during Annual Brahmotsavams for the year 2026. in Division
+											No:Executive Engineer-XI,Tirupati. </a>
+									</div>
+
+								</div>
+							
+								<div class="samer">
+
+									<div class="col-lg-12 row p0">
+
+										<div class="col-lg-6 row p0">
+											<span class="tHead">&nbsp;Tender ID:</span> &nbsp;<a href="#" onclick="viewtender(827334)" class="coli-id" title="(15th Finance Tied (Drinking Water))">960119</a>
+										</div>
+
+										<div class="col-lg-6 row rer">
+											<span class="tHead bgStrip">Bid Closing Date:</span> &nbsp;<span class="coli-date">27/07/2026 04:00 PM
+											</span>
+										</div>
+
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<span class="tHead">IFB No/Tender No:</span> &nbsp;<a href="#" onclick="viewtender(827334)" class="coli-tno">10 ZPGF 15th Finance Tide (DW)  2026-27  EE  RWS S Guntur</a>
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<a href="#" onclick="viewtender(827334)" class="tDesc">15th Finance Tied (Drinking Water) in Division
+											No:Executive Engineer, RWS &amp; S Division,Guntur. </a>
+									</div>
+
+								</div>
+							
+							<!--  -->
+						</section>
+
+						<section id="content2" class="tab-content">
+							<div class="more">
+								<a href="#" id="viewCorrigendumall" class="viewCurrentalltabs">
+									More... </a>
+							</div>
+
+							
+								<div class="samer">
+
+									<div class="col-lg-12 row p0">
+
+										<div class="col-lg-6 row p0">
+											<span class="tHead">&nbsp;Tender ID:</span> &nbsp;<a href="#" onclick="viewtender(814122)" class="coli-id" title="(Procurement and supply of Surgicals)">934929</a>
+										</div>
+
+										<div class="col-lg-6 row rer">
+											<span class="tHead bgStrip">Bid Closing Date:</span> &nbsp;<span class="coli-date">17/07/2026 05:30 PM
+											</span>
+										</div>
+
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<span class="tHead">IFB No/Tender No:</span> &nbsp;<a href="#" onclick="viewtender(814122)" class="coli-tno">186/APMSIDC/MEDICINE WING/ 2026-27</a>
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<a href="#" class="tDesc" onclick="viewtender(814122)">Procurement and supply of Surgicals
+											in Division No:APMSIDC. </a>
+									</div>
+
+								</div>
+							
+								<div class="samer">
+
+									<div class="col-lg-12 row p0">
+
+										<div class="col-lg-6 row p0">
+											<span class="tHead">&nbsp;Tender ID:</span> &nbsp;<a href="#" onclick="viewtender(814716)" class="coli-id" title="(Procurement and supply of Open loop Reagents)">935523</a>
+										</div>
+
+										<div class="col-lg-6 row rer">
+											<span class="tHead bgStrip">Bid Closing Date:</span> &nbsp;<span class="coli-date">17/07/2026 05:30 PM
+											</span>
+										</div>
+
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<span class="tHead">IFB No/Tender No:</span> &nbsp;<a href="#" onclick="viewtender(814716)" class="coli-tno">187-2/APMSIDC/MEDICINE WING/ 2026-27</a>
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<a href="#" class="tDesc" onclick="viewtender(814716)">Procurement and supply of Open loop Reagents
+											in Division No:APMSIDC. </a>
+									</div>
+
+								</div>
+							
+								<div class="samer">
+
+									<div class="col-lg-12 row p0">
+
+										<div class="col-lg-6 row p0">
+											<span class="tHead">&nbsp;Tender ID:</span> &nbsp;<a href="#" onclick="viewtender(814713)" class="coli-id" title="(Procurement and supply of Closed loop Reagents)">935520</a>
+										</div>
+
+										<div class="col-lg-6 row rer">
+											<span class="tHead bgStrip">Bid Closing Date:</span> &nbsp;<span class="coli-date">17/07/2026 05:30 PM
+											</span>
+										</div>
+
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<span class="tHead">IFB No/Tender No:</span> &nbsp;<a href="#" onclick="viewtender(814713)" class="coli-tno">187/APMSIDC/Medicine Wing/2026-27</a>
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<a href="#" class="tDesc" onclick="viewtender(814713)">Procurement and supply of Closed loop Reagents
+											in Division No:APMSIDC. </a>
+									</div>
+
+								</div>
+							
+								<div class="samer">
+
+									<div class="col-lg-12 row p0">
+
+										<div class="col-lg-6 row p0">
+											<span class="tHead">&nbsp;Tender ID:</span> &nbsp;<a href="#" onclick="viewtender(815180)" class="coli-id" title="(Procurement of Chemical Solvents and Glassware Consumables)">935987</a>
+										</div>
+
+										<div class="col-lg-6 row rer">
+											<span class="tHead bgStrip">Bid Closing Date:</span> &nbsp;<span class="coli-date">17/07/2026 05:30 PM
+											</span>
+										</div>
+
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<span class="tHead">IFB No/Tender No:</span> &nbsp;<a href="#" onclick="viewtender(815180)" class="coli-tno">T188/APMSIDC/MEDICINE WING/2026-27</a>
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<a href="#" class="tDesc" onclick="viewtender(815180)">Procurement of Chemical Solvents and Glassware Consumables
+											in Division No:APMSIDC. </a>
+									</div>
+
+								</div>
+							
+								<div class="samer">
+
+									<div class="col-lg-12 row p0">
+
+										<div class="col-lg-6 row p0">
+											<span class="tHead">&nbsp;Tender ID:</span> &nbsp;<a href="#" onclick="viewtender(817413)" class="coli-id" title="(Procurement and supply of ASHA Sarees)">941209</a>
+										</div>
+
+										<div class="col-lg-6 row rer">
+											<span class="tHead bgStrip">Bid Closing Date:</span> &nbsp;<span class="coli-date">17/07/2026 05:00 PM
+											</span>
+										</div>
+
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<span class="tHead">IFB No/Tender No:</span> &nbsp;<a href="#" onclick="viewtender(817413)" class="coli-tno">189/APMSIDC/MEDICINE WING/ 2026-27</a>
+									</div>
+
+									<div class="col-lg-12 row p0">
+										<a href="#" class="tDesc" onclick="viewtender(817413)">Procurement and supply of ASHA Sarees
+											in Division No:APMSIDC. </a>
+									</div>
+
+								</div>
+							
+						</section>
+
+						<section id="content3" class="tab-content">
+							<div class="more">
+								<a href="#" id="viewUpcomingall" class="viewCurrentalltabs">
+									More... </a>
+							</div>
+
+							
+								<div class="samer">
+
+									<div class="col-lg-12 row p0">
+
+										<div class="col-lg-6 row p0">
+											<span class="tHead">&nbsp;Tender ID:</span> &nbsp;<a href="#" onclick="viewtender(826982)" class="coli-id" title="(Repairs to Existing toilets in court complex at Gurazala in palnadu District SW:- Repairs to the existing Additional civil judge court building in the court complex at Gurazala on Palnadu District)">959767</a>
+										</div>
+
+										<div class="col-lg-6 row rer">
+											<span class="tHead bgStrip">Bid Closing Date:</span> &nbsp;<span class="coli-date">28/07/2026 03:30 PM
+											</span>
+										</div>
+
+									</div>
+
+									<div class="col-lg-6 row p0">
+										<span class="tHead">IFB No/Tender No:</span> &nbsp;<a href="#" onclick="viewtender(826982)" class="coli-tno"> NIT No.EE / R&amp;B / NRT / 41 / 2026-27, Dated : 07.07.2026</a>
+									</div>
+
+
+
+									<div class="col-lg-12 row p0">
+										<a href="#" class="tDesc" onclick="viewtender(826982)">Repairs to Existing toilets in court complex at Gurazala in palnadu District SW:- Repairs to the existing Additional civil judge court building in the court complex at Gurazala on Palnadu District
+											in Division No:EE OFFICE - NARSARAOPETA. </a>
+									</div>
+
+
+
+								</div>
+							
+								<div class="samer">
+
+									<div class="col-lg-12 row p0">
+
+										<div class="col-lg-6 row p0">
+											<span class="tHead">&nbsp;Tender ID:</span> &nbsp;<a href="#" onclick="viewtender(826957)" class="coli-id" title="(Construction of toilets in the X Additional District Judge court building at Gurazala in Palnadu District S.W:- Providing GI roofing sheets to the existing Additional civil judge court building in the court complex at Gurazala in Palnadu District.)">959742</a>
+										</div>
+
+										<div class="col-lg-6 row rer">
+											<span class="tHead bgStrip">Bid Closing Date:</span> &nbsp;<span class="coli-date">28/07/2026 03:30 PM
+											</span>
+										</div>
+
+									</div>
+
+									<div class="col-lg-6 row p0">
+										<span class="tHead">IFB No/Tender No:</span> &nbsp;<a href="#" onclick="viewtender(826957)" class="coli-tno"> NIT No.EE / R&amp;B / NRT / 40 / 2026-27, Dated : 07.07.2026</a>
+									</div>
+
+
+
+									<div class="col-lg-12 row p0">
+										<a href="#" class="tDesc" onclick="viewtender(826957)">Construction of toilets in the X Additional District Judge court building at Gurazala in Palnadu District S.W:- Providing GI roofing sheets to the existing Additional civil judge court building in the court complex at Gurazala in Palnadu District.
+											in Division No:EE OFFICE - NARSARAOPETA. </a>
+									</div>
+
+
+
+								</div>
+							
+								<div class="samer">
+
+									<div class="col-lg-12 row p0">
+
+										<div class="col-lg-6 row p0">
+											<span class="tHead">&nbsp;Tender ID:</span> &nbsp;<a href="#" onclick="viewtender(826553)" class="coli-id" title="(R&amp;R Grant)">959338</a>
+										</div>
+
+										<div class="col-lg-6 row rer">
+											<span class="tHead bgStrip">Bid Closing Date:</span> &nbsp;<span class="coli-date">28/07/2026 05:05 PM
+											</span>
+										</div>
+
+									</div>
+
+									<div class="col-lg-6 row p0">
+										<span class="tHead">IFB No/Tender No:</span> &nbsp;<a href="#" onclick="viewtender(826553)" class="coli-tno"> NIT NO.S 03/2026-27,DT.07.07.2026</a>
+									</div>
+
+
+
+									<div class="col-lg-12 row p0">
+										<a href="#" class="tDesc" onclick="viewtender(826553)">R&amp;R Grant
+											in Division No:Executive Engineer, P.R.I.Division,Tekkali.. </a>
+									</div>
+
+
+
+								</div>
+							
+								<div class="samer">
+
+									<div class="col-lg-12 row p0">
+
+										<div class="col-lg-6 row p0">
+											<span class="tHead">&nbsp;Tender ID:</span> &nbsp;<a href="#" onclick="viewtender(826389)" class="coli-id" title="(R&amp;R Grant)">959174</a>
+										</div>
+
+										<div class="col-lg-6 row rer">
+											<span class="tHead bgStrip">Bid Closing Date:</span> &nbsp;<span class="coli-date">28/07/2026 05:05 PM
+											</span>
+										</div>
+
+									</div>
+
+									<div class="col-lg-6 row p0">
+										<span class="tHead">IFB No/Tender No:</span> &nbsp;<a href="#" onclick="viewtender(826389)" class="coli-tno"> NIT NO.S 03/2026-27,DT.07.07.2026</a>
+									</div>
+
+
+
+									<div class="col-lg-12 row p0">
+										<a href="#" class="tDesc" onclick="viewtender(826389)">R&amp;R Grant
+											in Division No:Executive Engineer, P.R.I.Division,Tekkali.. </a>
+									</div>
+
+
+
+								</div>
+							
+								<div class="samer">
+
+									<div class="col-lg-12 row p0">
+
+										<div class="col-lg-6 row p0">
+											<span class="tHead">&nbsp;Tender ID:</span> &nbsp;<a href="#" onclick="viewtender(827369)" class="coli-id" title="(FDR Restoration of Surplus weir No.02 of Isukatageli tank of Isukatageli (hb) of isukatageli (Gp) in Yerpedu mandal of Tirupathi district.)">960154</a>
+										</div>
+
+										<div class="col-lg-6 row rer">
+											<span class="tHead bgStrip">Bid Closing Date:</span> &nbsp;<span class="coli-date">28/07/2026 05:00 PM
+											</span>
+										</div>
+
+									</div>
+
+									<div class="col-lg-6 row p0">
+										<span class="tHead">IFB No/Tender No:</span> &nbsp;<a href="#" onclick="viewtender(827369)" class="coli-tno"> Tender Notice No.11/2026-27,Dt:10.07.2026 (Item no.06)</a>
+									</div>
+
+
+
+									<div class="col-lg-12 row p0">
+										<a href="#" class="tDesc" onclick="viewtender(827369)">FDR Restoration of Surplus weir No.02 of Isukatageli tank of Isukatageli (hb) of isukatageli (Gp) in Yerpedu mandal of Tirupathi district.
+											in Division No:EE I &amp; CAD,Irrigation Division,Srikalahasti. </a>
+									</div>
+
+
+
+								</div>
+							
+						</section>
+					</div>
+					<!-- tabContainer Ends Here -->
+
+					<!-- cleintLogos -->
+
+					<div class="client-panel">
+
+						<div class="logo-scroller-wrapper">
+
+							<!-- Left Arrow -->
+							<div class="nav-btn left-btn" onclick="scrollLeft()">❮</div>
+
+							<div class="logo-scroller" id="scrollArea">
+
+								<a href="https://www.ap.gov.in/" target="_blank"> <img src="/resources/img/thumb-Portal-2.jpg">
+								</a> <a href="https://apts.gov.in/" target="_blank"> <img src="/resources/img/thumb-Portal-3.jpg">
+								</a> <a href="https://apit.ap.gov.in/" target="_blank"> <img src="/resources/img/thumb-Portal-4.jpg">
+								</a> <a href="https://konugolu.ap.gov.in/" target="_blank"> <img src="/resources/img/thumb-Portal-1.jpg">
+								</a>
+
+							</div>
+
+							<!-- Right Arrow -->
+							<div class="nav-btn right-btn" onclick="scrollRight()">❯</div>
+
+						</div>
+
+					</div>
+
+					
+					<!-- cleintLogos -->
+
+				</div>
+
+				<div class="col-md-3 p0">
+
+					<!--  -->
+					<div class="panel panel-resp panel-warning mb5">
+						<div class="panel-heading">
+							<img alt="" src="/resources/img/ico-userlogin.svg">
+							&nbsp; Login <span style="float: right;"> <a href="#" onclick="fnPreLogin('forgotPassword.html')" class="forgotPassword">Forgot Password ?</a>
+							</span>
+						</div>
+						<div class="panel-body">
+							<div class="col-md-12">
+								<div class="col-lg-12 rugi1">
+
+									<div class="form-group">
+
+										<center style="color: red;">
+											
+											
+
+
+											
+										</center>
+									</div>
+									<div class="form-group">
+
+										<input id="userName" name="userName" class="form-control" tabindex="1" placeholder="User Name" type="text" value="" autocomplete="off">
+										
+									</div>
+									<div class="form-group">
+										<input id="password" name="password" class="form-control" tabindex="2" onpaste="return false" placeholder="Password" type="password" value="" autocomplete="off">
+
+										
+									</div>
+									<div class="form-group">
+										
+									</div>
+									<div class="form-group pt10">
+
+										<div class="btn-dflex">
+
+											<div>
+												<div onclick="fnPreLogin('TermsAndConditions.html')" class="btnRegister">Register ?</div>
+											</div>
+
+											<div>
+												<input type="button" class="texrt" id="btnLogin" value="Login" onclick="return formclick()" tabindex="3">
+											</div>
+
+
+
+										</div>
+
+										<div>
+
+											<div class="col-lg-6">
+												
+											</div>
+
+										</div>
+
+										<div class="col-lg-12" style="font-size: 12px;">
+											
+										</div>
+
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+					<!-- Login Ends Here -->
+
+					<!--  -->
+
+					<div class="panel panel-resp panel-warning noShadow p0m0 mtb5">
+						<div class="panel-heading">
+							<img alt="" src="/resources/img/ico-forgot-password.svg">
+							&nbsp; <a href="#" onclick="fnPreLogin('forgotUserId.html')">Forgot
+								User ID?</a>
+						</div>
+					</div>
+
+					<div class="panel panel-resp panel-warning noShadow p0m0 mtb5">
+						<div class="panel-heading">
+							<img alt="" src="/resources/img/ico-emd.svg">
+							&nbsp; <a href="#" onclick="refundOrTransferClick()">Check
+								EMD Status</a>
+						</div>
+						<div id="refundOrTransfer" style="display: none;">
+							<div class="panel-body panel panel-warning m0">
+								<div class="col-md-12">
+									<div id="errmsg" style="color: red"></div>
+									<div id="spanHide">Payment ID:</div>
+									<input id="paymentId" name="paymentId" type="text" class="num" value="">
+									<input id="paymentBtn" onclick="paymentSearch()" type="button" class="Button" value="Submit">
+									<div id="refundResponse"></div>
+									<div id="refundResponse2"></div>
+									<div id="refundResponse3"></div>
+									<table id="transferStatusTable" style="display: none;">
+										<tbody><tr>
+											<td>Initiated Date and Time:</td>
+											<td><div id="refundDate"></div></td>
+										</tr>
+										<tr>
+											<td>Amount:</td>
+											<td><div id="amount"></div></td>
+										</tr><tr>
+											<td><div id="accountRef"></div></td>
+											<td><div id="sCreditAccNoRef"></div></td>
+										</tr>
+
+									</tbody></table>
+									<br>
+								</div>
+							</div>
+						</div>
+					</div>
+					<!-- end  -->
+
+					<div class="panel panel-resp panel-warning noShadow p0m0 mtb5">
+						<div class="panel-heading">
+							<img alt="" src="/resources/img/ico-links.svg">
+							&nbsp; <a href="certificateReset.html">Reset Certificate </a>
+						</div>
+					</div>
+
+					<!-- Other Links -->
+					<div class="panel panel-resp panel-warning mtb5 dnone" style="display: none !important;">
+						<div class="panel-heading">
+							<img alt="" src="/resources/img/ico-links.svg">
+							&nbsp; Other Links
+						</div>
+						<div class="panel-body">
+							<div class="col-md-12">
+								<ul class="linst-img rugi1">
+
+									<!-- <li><a href="#" onclick="fnPreLogin('forgotPassword.html')">Forgot password </a></li> -->
+									<!-- <li><a href="DeptForgotPassword.html">Department Forgot password ?</a></li> -->
+									<!-- <li><a href="#" onclick="fnPreLogin('TermsAndConditions.html')">Supplier Registration</a></li> -->
+									<!-- <li><a href="#" onclick="fnPreLogin('forgotPassword.html')">Forgot password ?</a></li>
+ 								 	<li> <a href="#" class="blink blinkTxt" onclick="fnPreLogin('TermsAndConditions.html')">Register</a></li> -->
+
+									<!-- <li><a href="#" onclick="fnPreLogin('forgotUserId.html')">Forgot UserId?</a></li> -->
+									<!-- <li><a href="#" onclick="fnPreLogin('digital-signature.html')">Digital Signature</a></li> -->
+									<!-- <li><a href="#" onclick="fnPreLogin('helpdesk.html')">HelpDesk</a></li> -->
+									<!-- <li><a href="#" onclick="fnPreLogin('helpdesk.html')">Contact Us</a></li> -->
+									<!--<li><a href="#">Suppliers List</a></li>-->
+									<!-- <li><a href="RevokedSuppliers.html" style="color: green; font-weight: bold;">Revoked Suppliers</a></li> -->
+									<li><a href="#" onclick="fnPreLogin('blocked-suppliers.html')">Blocked
+											Suppliers</a></li>
+									<li><a href="certificateReset.html">Reset Certificate
+									</a></li>
+								</ul>
+							</div>
+						</div>
+					</div>
+					<!-- Other Links -->
+
+					<div class="panel panel-resp panel-warning noShadow p0m0 mt0" onclick="fnPreLogin('selfhelp.html')">
+						<div class="thumbLogo videoTutorials">
+							<img src="/resources/img/ico-play.png" title="Self Help" alt="Self Help"> Video Tutorials
+						</div>
+					</div>
+
+					<!--  -->
+					<div class="panel panel-resp panel-warning p0m0 mtb5">
+						<div class="panel-heading">
+							<img alt="" src="/resources/img/ico-news.svg">
+							&nbsp; News
+						</div>
+						<div class="panel-body bgrer">
+							<div class="col-md-12">
+								<div class="block-hdnews">
+									<div class="list-wrpaaer" style="height: 220px; position: relative; overflow: hidden;">
+
+										<ul class="list-aggregate" id="marquee-vertical" style="position: absolute; top: 0px; left: 0px; height: 1000%;">
+											
+												<li>
+													<p style="text-align: left" class="tLabelBlue">As Per G.O.Ms.No.16, IT,E&amp;C Department, Dated: 27.09.2018, Government of Andhra Pradesh is Implementing the ‘Konugolu’ portal to provide eAuction services to All Government Departments, PSUs, Societies, Local Bodies and other Institutions of Andhra Pradesh in place of existing platform of M/s MSTC.</p>
+												</li>
+											
+												<li>
+													<p style="text-align: left" class="tLabelBlue">As per the Letter No. 1086808/IT,E&amp;C/e-proc/2020, Dt:07.03.2020, AP eProcurement portal compliance with World Bank eProcurement guidelines. Department users can float the World bank tenders through AP eProcurement portal</p>
+												</li>
+											
+										<li>
+													<p style="text-align: left" class="tLabelBlue">As Per G.O.Ms.No.16, IT,E&amp;C Department, Dated: 27.09.2018, Government of Andhra Pradesh is Implementing the ‘Konugolu’ portal to provide eAuction services to All Government Departments, PSUs, Societies, Local Bodies and other Institutions of Andhra Pradesh in place of existing platform of M/s MSTC.</p>
+												</li><li>
+													<p style="text-align: left" class="tLabelBlue">As per the Letter No. 1086808/IT,E&amp;C/e-proc/2020, Dt:07.03.2020, AP eProcurement portal compliance with World Bank eProcurement guidelines. Department users can float the World bank tenders through AP eProcurement portal</p>
+												</li></ul>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+					<div class="col-lg-12 eg"></div>
+					<!-- News & Gos Ends Here -->
+
+
+
+				</div>
+			</div>
+		</div>
+		<!-- /.container -->
+
+		<!-- Footer -->
+		<footer class="tsBottomFooter">
+			<div class="container">
+				<div class="row footer-nav">
+					<!-- Bottom Links Starts Here -->
+					<!-- <div class="col-md-2 minSpacer"></div> -->
+					<div class="col-md-12">
+						<ul class="footernav">
+							<!-- <li><a href='login.html'>Home</a></li> -->
+							<!-- <li><a href="#" onclick="fnPreLogin('eprocurement-guidelines.html')">eProcurement&nbsp;Guidelines</a></li>
+							<li><a href="#" onclick="misReport()">MIS Reports</a></li>
+							<li><a href="#" onclick="fnPreLogin('news-government-orders.html')">Government Orders</a></li>
+							<li><a href="#" onclick="fnPreLogin('faqs.html')">FAQs</a></li>
+							<li><a href="#" onclick="fnPreLogin('downloads.html')">Downloads</a></li> -->
+							<li><a href="#" onclick="fnPreLogin('terms-conditions.html')">Terms &amp;
+									Conditions</a></li>
+							<li><a href="#" onclick="fnPreLogin('privacy-policy.html')" style="border-right: 0px;">Privacy Policy</a></li>
+							<!-- <li><a href="#" onclick="fnPreLogin('feedback-suggestions.html')" style="border-right: 0px;">Feedback/Suggestions</a></li> -->
+							<!-- <li><a href="#" onclick="fnPreLogin('helpdesk.html')" style="border-right: 0px;">Helpdesk Support</a></li> -->
+						</ul>
+
+					</div>
+					<!-- Bottom Links Ends Here -->
+				</div>
+			</div>
+
+		</footer>
+		<div class="footer-bg">
+			<div class="footer-container">
+
+				<div class="footer-left">
+					<span class="bottomTxt"> © ITE&amp;C Department, Government
+						of Andhra Pradesh. Maintained by AP Technology Services. </span>
+				</div>
+
+				<div class="footer-right">
+					<span class="bottomTxt"> 
+						
+						Server Time: 13/07/2026 01:29:05 AM
+					</span>
+				</div>
+
+			</div>
+		</div>
+
+		<!-- /.container -->
+
+		<!-- 		<button id="myBtn">Custom Window</button> -->
+
+		<div id="customModelWindow" class="customModal">
+			<div class="customModal-content">
+				<div style="min-height: 140px;">
+					<h1>System Requirement</h1>
+					<br>
+					<p>
+						This System Requires emSigner to login and registration.<br>Click
+						on <span class="red">" INSTALL "</span> to download the emSigner
+					</p>
+					<br>
+					<p>
+						If downloaded click on <span class="red">" NO I ALREADY
+							HAVE "</span> - Go to your Desktop,<br> Right-click on the emSigner
+						icon and run the program by selecting Run as administrator and
+						after <span class="yellow">emSigner started Successfully</span>
+						click on <span class="green">" OK "</span>
+					</p>
+				</div>
+				<div style="padding: 15px 0px; min-height: 50px;">
+					<div class="btnModel" id="btnInstall" data-ins="0">Install</div>
+					<div class="btnModel customModalClose" id="btnInstallNo" data-ins="1">No, I Already Have</div>
+				</div>
+			</div>
+									</div>
+							
+							
+							
+							
+									<!-- Splash -->
+									<div class="splash" id="splash">
+										<div class="sp-close-btn" onclick="closeSplash()">X</div>
+										<img src="/resources/img/unstoppable-amaravath.jpg" alt="Unstoppable Amaravathi" class="splash-img">
+										<div class="sp-progress-container">
+											<div class="sp-progress-bar" id="sp-progress-bar" style="width: 0%;"></div>
+										</div>
+									</div>
+							
+									
+							
+							
+							
+							
+							
+							
+							
+							
+							
+							
+							
+							
+							
+									<script>
+    // Get the customModal
+    var customModal = document.getElementById('customModelWindow');
+
+    // Get the button that opens the customModal
+    var btn = document.getElementById("myBtn");
+
+    // Get the <span> element that customModalCloses the customModal
+    var span = document.getElementsByClassName("customModalClose")[0];
+
+    // When the user clicks the button, open the customModal
+    btn.onclick = function() {
+    customModal.style.display = "block";
+    } 
+
+    // When the user clicks on <span> (x), customModalClose the customModal
+    span.onclick = function() {
+    customModal.style.display = "none";
+    }
+
+    // When the user clicks anywhere outside of the customModal, customModalClose it
+    /*window.onclick = function(event) {
+    if (event.target == customModal) {
+        customModal.style.display = "none";
+    }
+    }*/
+  	</script>
+
+
+		
+		
+		
+			<script src="/resources/scripts/emsigner_login.js?ver=15042020"></script>
+		
+		
+
+		<input type="hidden" name="popUPRequestParameter" value="">
+
+
+		<input type="hidden" name="hdnProcurementID">
+		<input type="hidden" name="hdnPage">
+		<input type="hidden" name="hdnType">
+		<input type="hidden" name="hdnRandomVal">
+		<input type="hidden" name="hdnSelectedCertificate">
+		<input type="hidden" name="hdncertSerialNo" value="">
+		<input type="hidden" name="hdnCertIssuer" value="">
+		<input type="hidden" name="hdnExpiryDate" value="">
+		<input type="hidden" name="hdnOwnerName" value="">
+		<input type="hidden" name="hdnThumbPrint" value="">
+		<input type="hidden" name="hdnActiveDate" value="">
+		<input type="hidden" name="hdnSubjectDN" value="">
+		<input type="hidden" name="hdnPublicKey" value="">
+		<input type="hidden" name="failCount" id="failCount" value="">
+		<input type="hidden" name="hdnImmediatePreviousPage" id="hdnImmediatePreviousPage" value="login.html">
+		<input type="hidden" name="hdnPreviousPage" id="hdnPreviousPage" value="login.html">
+		<input type="hidden" name="hdncaptcha" id="hdncaptcha" value="0">
+
+		<input type="hidden" name="dtBidClosing1" id="dtBidClosing1" value="">
+		<input type="hidden" name="hdnSignData">
+		<input type="hidden" name="hdnEnc" id="hdnEnc" value="1">
+
+		<input type="hidden" name="emSignIssuerName" id="emSignIssuerName">
+		<input type="hidden" name="passwordHash" id="passwordHash">
+	<div>
+<input type="hidden" name="CSRFToken" value="524e7170-b428-48b4-953c-818a82f77cb1">
+<input type="hidden" name="hdnEncryptNames" value="hdnEncryptNames">
+<input type="hidden" name="hdnEncryptValues" value="hdnEncryptValues">
+</div></form>
+	<!-- onPageLoad Starts Here -->
+
+	<script src="/resources/js/jquery.js"></script>
+	<script src="/resources/scripts/EmdPaymentStatus.js"></script>
+	<script src="/resources/js/bootstrap.min.js"></script>
+
+	<script type="text/javascript" src="/resources/js/marquee.js"></script>
+	<!-- onPageLoad Ends Here -->
+	<script type="text/javascript" src="/resources/scripts/tempshape.js"></script>
+	<script type="text/javascript" src="/resources/scripts/RandomValues.js"></script>
+	<script src="/resources/scripts/login_emudhra.js?ver=20062022_5"></script>
+	<script src="/resources/js/modernizr.js"></script>
+	<script src="/resources/js/fusioncharts.js?ver=2023"></script>
+	<script src="/resources/js/fusioncharts.theme.zune.js?ver=2023"></script>
+
+	<script type="text/javascript" src="/resources/scripts/temp.test.js"></script>
+	<script type="text/javascript" src="/resources/scripts/tempTest.js"></script>
+	<script type="text/javascript" src="/resources/scripts/temp.js"></script>
+	<!-- Bootstrap Core JavaScript1 -->
+	<script type="text/javascript" src="/resources/js/jquery.marquee.js"></script>
+	<script type="text/javascript">
+	$(document).ready(function(){
+		$("#myModal").modal('show');
+	});
+</script>
+
+
+	<script>
+
+(function ($) {
+	$.fn.countTo = function (options) {
+		options = options || {};
+		
+		return $(this).each(function () {
+			// set options for current element
+			var settings = $.extend({}, $.fn.countTo.defaults, {
+				from:            $(this).data('from'),
+				to:              $(this).data('to'),
+				speed:           $(this).data('speed'),
+				refreshInterval: $(this).data('refresh-interval'),
+				decimals:        $(this).data('decimals')
+			}, options);
+			
+			// how many times to update the value, and how much to increment the value on each update
+			var loops = Math.ceil(settings.speed / settings.refreshInterval),
+				increment = (settings.to - settings.from) / loops;
+			
+			// references & variables that will change with each update
+			var self = this,
+				$self = $(this),
+				loopCount = 0,
+				value = settings.from,
+				data = $self.data('countTo') || {};
+			
+			$self.data('countTo', data);
+			
+			// if an existing interval can be found, clear it first
+			if (data.interval) {
+				clearInterval(data.interval);
+			}
+			data.interval = setInterval(updateTimer, settings.refreshInterval);
+			
+			// initialize the element with the starting value
+			render(value);
+			
+			function updateTimer() {
+				value += increment;
+				loopCount++;
+				
+				render(value);
+				
+				if (typeof(settings.onUpdate) == 'function') {
+					settings.onUpdate.call(self, value);
+				}
+				
+				if (loopCount >= loops) {
+					// remove the interval
+					$self.removeData('countTo');
+					clearInterval(data.interval);
+					value = settings.to;
+					
+					if (typeof(settings.onComplete) == 'function') {
+						settings.onComplete.call(self, value);
+					}
+				}
+			}
+			
+			function render(value) {
+				var formattedValue = settings.formatter.call(self, value, settings);
+				$self.html(formattedValue);
+			}
+		});
+	};
+	
+	$.fn.countTo.defaults = {
+		from: 0,               // the number the element should start at
+		to: 0,                 // the number the element should end at
+		speed: 1000,           // how long it should take to count between the target numbers
+		refreshInterval: 100,  // how often the element should be updated
+		decimals: 0,           // the number of decimal places to show
+		formatter: formatter,  // handler for formatting the value before rendering
+		onUpdate: null,        // callback method for every time the element is updated
+		onComplete: null       // callback method for when the element finishes updating
+	};
+	
+	function formatter(value, settings) {
+		return value.toFixed(settings.decimals);
+	}
+}(jQuery));
+
+jQuery(function ($) {
+  // custom formatting example
+  $('.count-number').data('countToOptions', {
+	formatter: function (value, options) {
+	  return value.toFixed(options.decimals).replace(/\B(?=(?:\d{3})+(?!\d))/g, ',');
+	}
+  });
+  
+  // start all the timers
+  $('.timer').each(count);  
+  
+  function count(options) {
+	var $this = $(this);
+	options = $.extend({}, options || {}, $this.data('countToOptions') || {});
+	$this.countTo(options);
+  }
+});
+
+
+</script>
+
+
+
+
+
+
+	<script src="/resources/js/jquery.splitflap.js"></script>
+	<script>
+    (function ($) {
+        $(document).ready(function () {
+            $('.do-splitflap')
+                    .splitFlap();
+
+            $('.click-splitflap')
+                    .splitFlap({
+                        textInit:   'Click me ',
+                        autoplay:   false,
+                        onComplete: function () {
+                            console.log('Done !');
+                        }
+                    })
+                    .click(function () {
+                        $(this).splitFlap('splitflap').animate();
+                    });
+
+            $('.empty-splitflap')
+                    .splitFlap({
+                        text: 'This is JS'
+                    });
+
+            var ratio = 0.5;
+            $('.resized-splitflap')
+                    .splitFlap({
+                        charWidth:  20 * ratio,
+                        charHeight: 40 * ratio,
+                        imageSize:  (2500 * ratio) + 'px ' + (100 * ratio) + 'px'
+                    });
+        });
+    })(jQuery);
+</script>
+	<script>
+var str = document.getElementById("hdnEnc").value;
+
+
+
+  if(parseInt(str)==1)
+	{  
+var modal = document.getElementById('myModal');
+
+modal.style.display = "block";
+//Get the <span> element that closes the modal
+var span = document.getElementsByClassName("close")[0];
+
+var cls = document.getElementById("close");
+// When the user clicks on <span> (x), close the modal
+span.onclick = function() {
+    modal.style.display = "none";
+}
+function closeModel() {
+    modal.style.display = "none";
+}
+	 }  
+  
+  function closeModel() {
+	  var modal = document.getElementById('myModal');
+	  
+	    modal.style.display = "none";
+	   
+	}
+</script>
+	<script language="javascript">
+
+		var detect = navigator.userAgent.toLowerCase();
+		var OS,browser,version,total,thestring;
+		var gPlace;
+		
+		if (checkIt('konqueror'))
+		{
+			browser = "Konqueror";
+			OS = "Linux";
+		}
+		else if (checkIt('msie')) browser = "Internet Explorer"
+		else if (checkIt('chrome')) browser = "Google Chrome"
+		else if (!checkIt('compatible'))
+		{
+			browser = "Netscape Navigator"
+			version = detect.charAt(8);
+		}
+		else browser = "An unknown browser";
+		
+		
+		
+		version = detect.charAt(gPlace + thestring.length);
+		
+		
+		
+		function checkIt(string)
+		{
+			place = detect.indexOf(string) + 1;
+			gPlace = place;
+			thestring = string;
+			return place;
+		}
+
+</script>
+
+	<script type="text/javascript">
+        $(document).ready(function () {
+            $("#columnChartForTenders").show();
+            $("#columnChartForTendersValue").hide();
+            $("#value").click(function () {
+                $("#columnChartForTendersValue").show();
+                $("#columnChartForTenders").hide();
+                
+                $("#value").prop('style','color:#adb5bd;');
+                $("#count").prop('style','color:#0c447e;');
+            });
+            $("#count").click(function () {
+                $("#columnChartForTenders").show();
+                $("#columnChartForTendersValue").hide();
+                
+                $("#value").prop('style','color:#0c447e;');
+                $("#count").prop('style','color:#adb5bd;');
+                
+            });
+        });
+        
+        
+        
+        
+
+        FusionCharts.ready(function(){
+            var tenderCountChart = new FusionCharts({
+              type: 'column2d',
+              renderAt: 'columnChartForTenders',
+              width: '300',
+              height: '230',
+              dataFormat: 'json',
+              dataSource: {
+               "chart": {
+                  "caption": "Tenders Published",
+                  "xAxisName": "Year",
+                  "yAxisName": "No of Tenders",
+                  "bgcolor": "#FFFFFF",
+                  "canvasBgColor": '#ffffff',
+                  "paletteColors" : "#0266B4, #008E46, #FD7F18, #003402, #7e00e8",
+                  "theme": "zune",
+               
+               },
+               "data": [
+        				
+
+        				 
+        				
+        					{
+        					 "label":"2026-27",
+        			         "value": "18670",
+        					},
+        					
+        					
+        				
+        					{
+        					 "label":"2025-26",
+        			         "value": "66828",
+        					},
+        					
+        					
+        				
+        					{
+        					 "label":"2024-25",
+        			         "value": "44977",
+        					},
+        					
+        					
+        				
+        					{
+        					 "label":"2023-24",
+        			         "value": "87823",
+        					},
+        					
+        					
+        				
+        					{
+        					 "label":"2022-23",
+        			         "value": "76529",
+        					},
+        					
+        					
+        				
+        					{
+        					 "label":"2021-22",
+        			         "value": "68838",
+        					},
+        					
+        					
+        				
+        					{
+        					 "label":"2020-21",
+        			         "value": "50437",
+        					},
+        					
+        					 
+        			
+        	        
+        	        ]
+              }
+            
+         
+          });
+            tenderCountChart.render("columnChartForTenders");
+
+        	
+        });
+         
+        FusionCharts.ready(function(){
+        	//alert("hai");
+            var tenderValueChart = new FusionCharts({
+              type: 'column2d',
+              renderAt: 'columnChartForTendersValue',
+              width: '300',
+              height: '230',
+              dataFormat: 'json',
+              dataSource: {
+               "chart": {
+                  "caption": "Value of Tenders Published",
+                  "xAxisName": "Year",
+                  "yAxisName": "Value of Tenders",
+                  "bgcolor": "#FFFFFF",
+                  "canvasBgColor": '#ffffff',
+                  "paletteColors" : "#0266B4, #008E46, #FD7F18, #003402, #7e00e8",
+                  "theme": "zune",
+                
+                  "numberscalevalue": "10000000",
+                  "numberscaleunit": " Cr",
+                  "showvalues": "1",
+               },
+               "data":  [
+            	   
+
+                         
+        				  
+        					
+        					{
+        					 "label":"2026-27",
+        			         "value": "1.85355346403E11",
+        					},
+        					
+        					
+        					
+        					{
+        					 "label":"2025-26",
+        			         "value": "8.43626552854E11",
+        					},
+        					
+        					
+        					
+        					{
+        					 "label":"2024-25",
+        			         "value": "6.56878823493E11",
+        					},
+        					
+        					
+        					
+        					{
+        					 "label":"2023-24",
+        			         "value": "5.2633621404E11",
+        					},
+        					
+        					
+        					
+        					{
+        					 "label":"2022-23",
+        			         "value": "6.65443057856E11",
+        					},
+        					
+        					
+        					
+        					{
+        					 "label":"2021-22",
+        			         "value": "1.028808513931E12",
+        					},
+        					
+        					
+        					
+        					{
+        					 "label":"2020-21",
+        			         "value": "6.61353553545E11",
+        					},
+        					
+        					 
+        			
+        	        
+        	        ]
+              }
+         
+          });
+            tenderValueChart.render("columnChartForTendersValue");
+
+        }); 
+        
+    </script>
+
+	<script type="text/javascript">
+		var vEmiSigWinEnDisable='1';
+	</script>
+	<input type="hidden" name="hdnVersion" value="22112017">
+
+	<script src="/resources/js/grayCSS.js"></script>
+
+	<script>
+	const scroller = document.getElementById("scrollArea");
+	let autoScroll;
+	
+	function getItemWidth() {
+	    const img = scroller.querySelector("img");
+	    return img ? img.offsetWidth + 20 : 150; // (image width + gap)
+	}
+	
+	// Auto Scroll One-by-One
+	function startAutoScroll() {
+	    autoScroll = setInterval(() => {
+	        const itemWidth = getItemWidth();
+	
+	        // If at end Ã¢ÂÂ go back to start
+	        if (scroller.scrollLeft + scroller.clientWidth >= scroller.scrollWidth - itemWidth) {
+	            scroller.scrollTo({ left: 0, behavior: "smooth" });
+	        } else {
+	            scroller.scrollBy({ left: itemWidth, behavior: "smooth" });
+	        }
+	    }, 2000); // delay between slides (2 seconds)
+	}
+	
+	function stopAutoScroll() {
+	    clearInterval(autoScroll);
+	}
+	
+	// Manual Buttons
+	function scrollLeft() {
+	    scroller.scrollBy({ left: -getItemWidth(), behavior: "smooth" });
+	}
+	function scrollRight() {
+	    scroller.scrollBy({ left: getItemWidth(), behavior: "smooth" });
+	}
+	
+	// Start auto scroll initially
+	startAutoScroll();
+	
+	// Pause on hover
+	scroller.addEventListener("mouseenter", stopAutoScroll);
+	scroller.addEventListener("mouseleave", startAutoScroll);
+	</script>
+
+	<script>
+		document.addEventListener("DOMContentLoaded", function () {
+		
+		    const menuButton = document.getElementById("menu-button");
+		    const menu = document.getElementById("cssmenu");
+		
+		    // Toggle main menu
+		    menuButton.addEventListener("click", function () {
+		        menu.classList.toggle("active");
+		    });
+		
+		    // Handle dropdown click (FAQs)
+		    const dropdowns = document.querySelectorAll("#cssmenu ul li > a");
+		
+		    dropdowns.forEach(function (item) {
+		        item.addEventListener("click", function (e) {
+		            const parent = this.parentElement;
+		
+		            if (parent.querySelector("ul")) {
+		                e.preventDefault();
+		                parent.classList.toggle("open");
+		            }
+		        });
+		    });
+		
+		});
+	</script>
+
+									<!--<======================== this is for progress bar amaravathi unstoppable ========================================>-->
+	<script>
+$(document).ready(function() {
+	    
+	    const splash = document.getElementById("splash");
+	    const progressBar = document.getElementById("sp-progress-bar");
+	    
+	    window.closeSplash = function() {
+	        splash.classList.add("hide");
+	        
+	        setTimeout(() => {
+	            splash.style.display = "none";
+	        }, 800);
+	    };
+	    
+	    if (progressBar) {
+	        progressBar.style.width = "0%";
+	        // Or hide the progress bar completely:
+	        // progressBar.style.display = "none";
+	    }
+	    
+	    
+	});
+	
+	
+	
+// 	$(document).ready(function() {
+	    
+// 	    const splash = document.getElementById("splash");
+// 	    const progressBar = document.getElementById("sp-progress-bar");
+// 	    let startTime = null;
+// 	    let animationFrame = null;
+// 	    let splashTimeout;
+// 	    const timeoutDuration = 3000; // 3 seconds
+	    
+// 	    window.closeSplash = function() {
+// 	        if (splashTimeout) {
+// 	            clearTimeout(splashTimeout);
+// 	        }
+// 	        if (animationFrame) {
+// 	            cancelAnimationFrame(animationFrame);
+// 	        }
+// 	        splash.classList.add("hide");
+	        
+// 	        setTimeout(() => {
+// 	            splash.style.display = "none";
+// 	        }, 800);
+// 	    };
+	    
+// 	    // Animate progress bar using requestAnimationFrame
+// 	    function animateProgressBar(timestamp) {
+// 	        if (!startTime) startTime = timestamp;
+// 	        const elapsed = timestamp - startTime;
+// 	        const progress = Math.min((elapsed / timeoutDuration) * 100, 100);
+	        
+// 	        if (progressBar) {
+// 	            progressBar.style.width = progress + "%";
+// 	        }
+	        
+// 	        if (progress < 100) {
+// 	            animationFrame = requestAnimationFrame(animateProgressBar);
+// 	        }
+// 	    }
+	    
+// 	    if (progressBar) {
+// 	        progressBar.style.width = "0%";
+// 	        startTime = null;
+// 	        animationFrame = requestAnimationFrame(animateProgressBar);
+// 	    }
+	    
+// 	    // Auto close after timeout
+// 	    splashTimeout = setTimeout(window.closeSplash, timeoutDuration);
+	    
+// 	});
+							</script>
+							<!--<=========== End =========>-->
+
+
+<div class="fusioncharts-smartlabel-container" aria-hidden="true" role="presentation" style="position: absolute; top: -9999em; left: -9999em; white-space: nowrap; padding: 0px; width: 1px; height: 1px; overflow: hidden;"><div style="font-size: 12px; line-height: 14.4px; display: inline-block;" aria-hidden="true" role="presentation">WgI</div><canvas style="width: 0px; height: 0px;"></canvas><div style="font-family: Verdana, sans; font-size: 10px; line-height: 12px; color: rgb(102, 102, 102); display: inline-block;" aria-hidden="true" role="presentation">Loading chart. Please wait.</div><canvas style="width: 0px; height: 0px;"></canvas><div style="font-family: Verdana, sans; line-height: 12px; color: rgb(102, 102, 102); display: inline-block;" aria-hidden="true" role="presentation">Loading chart. Please wait.</div><canvas style="width: 0px; height: 0px;"></canvas><div style="font-family: &quot;Helvetica Neue&quot;, Arial; font-size: 10px; line-height: 12px; color: rgb(51, 51, 51); display: inline-block;" aria-hidden="true" role="presentation">W</div><canvas style="width: 0px; height: 0px;"></canvas><div style="font-family: &quot;Helvetica Neue&quot;, Arial; font-weight: bold; font-size: 10px; line-height: 12px; color: rgb(51, 51, 51); display: inline-block;" aria-hidden="true" role="presentation">No of Tenders</div><canvas style="width: 0px; height: 0px;"></canvas><div style="font-family: &quot;Helvetica Neue&quot;, Arial; font-weight: bold; font-size: 12px; line-height: 14.4px; color: rgb(51, 51, 51); display: inline-block;" aria-hidden="true" role="presentation">Tenders Published</div><canvas style="width: 0px; height: 0px;"></canvas><div style="font-family: &quot;Helvetica Neue&quot;, Arial; font-weight: normal; font-size: 10px; line-height: 12px; color: rgb(255, 255, 255); display: inline-block;" aria-hidden="true" role="presentation">50.44K</div><canvas style="width: 0px; height: 0px;"></canvas><div style="font-family: &quot;Helvetica Neue&quot;, Arial; font-weight: normal; font-size: 10px; line-height: 12px; color: rgb(51, 51, 51); display: inline-block;" aria-hidden="true" role="presentation">2020-21</div><canvas style="width: 0px; height: 0px;"></canvas><div style="font-family: &quot;Helvetica Neue&quot;, Arial; font-weight: normal; font-size: 10px; line-height: 12px; display: inline-block;" aria-hidden="true" role="presentation">50.44K</div><canvas style="width: 0px; height: 0px;"></canvas></div><span id="fusioncharts-tooltip-element" style="display: block; position: absolute; text-align: left; margin: 0px; z-index: 99999; pointer-events: none;"><span style="overflow: hidden; display: block;"></span></span></body></html>

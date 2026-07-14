@@ -1,0 +1,90 @@
+[
+  {
+    "frame": "https://tender.apeprocurement.gov.in/TenderDetailsHome.html#",
+    "selects": [
+      {
+        "id": "nDepartmentID",
+        "name": "nDepartmentID",
+        "options": [
+          "Select Department",
+          "Greater Visakhapatnam Smart City Corporation Limited",
+          "A P  STATE HOUSING  CORPORATION  LIMITED",
+          "A P Factories",
+          "A P FOREST DEPARTMENT"
+        ],
+        "totalOptions": 218
+      },
+      {
+        "id": "subDeptId",
+        "name": "subDeptId",
+        "options": [
+          "Select Circle"
+        ],
+        "totalOptions": 1
+      },
+      {
+        "id": "ddlDistrict",
+        "name": "ddlDistrict",
+        "options": [
+          "Select District",
+          "ALLURI SETHARAMA RAJU",
+          "ANAKAPALLI",
+          "ANANTHAPUR",
+          "ANNAMAYYA"
+        ],
+        "totalOptions": 27
+      },
+      {
+        "id": "ddlMandal",
+        "name": "ddlMandal",
+        "options": [
+          "Select Mandal"
+        ],
+        "totalOptions": 1
+      },
+      {
+        "id": "biddingType1",
+        "name": "biddingType",
+        "options": [
+          "Select Search By",
+          "Limited",
+          "eAuction"
+        ],
+        "totalOptions": 3
+      },
+      {
+        "id": "sProcurementType",
+        "name": "sProcurementType",
+        "options": [
+          "Tender Category",
+          "WORKS",
+          "PRODUCTS",
+          "SERVICES"
+        ],
+        "totalOptions": 4
+      },
+      {
+        "id": "dtBidClosingselect1",
+        "name": "dtBidClosingselect",
+        "options": [
+          "By Dates",
+          "Bid Submission StartDate",
+          "Bid Submission EndDate"
+        ],
+        "totalOptions": 3
+      },
+      {
+        "id": null,
+        "name": "pagetable13_length",
+        "options": [
+          "10",
+          "20",
+          "40",
+          "50",
+          "100"
+        ],
+        "totalOptions": 5
+      }
+    ]
+  }
+]

@@ -49,9 +49,26 @@ export const HOME_URL = 'https://tender.apeprocurement.gov.in/login.html';
 export const CONFIG = {
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN,
   telegramChatId: process.env.TELEGRAM_CHAT_ID,
+  // ---- adaptive scheduling ----
+  // Office hours (Mon–Sat, IST — server timezone is Asia/Kolkata): check
+  // every ACTIVE_INTERVAL_MINUTES. Nights & Sundays: QUIET_INTERVAL_MINUTES.
+  // Departments publish tenders during working hours, so this gives 3×
+  // faster detection when it matters while REDUCING total portal load.
+  activeStartHour: parseInt(process.env.ACTIVE_START_HOUR || '9', 10),
+  activeEndHour: parseInt(process.env.ACTIVE_END_HOUR || '19', 10),
+  activeIntervalMin: parseInt(process.env.ACTIVE_INTERVAL_MINUTES || '15', 10),
+  quietIntervalMin: parseInt(process.env.QUIET_INTERVAL_MINUTES || '60', 10),
+  // Legacy fallback (used if ADAPTIVE_SCHEDULE=0 in .env)
+  adaptiveSchedule: process.env.ADAPTIVE_SCHEDULE !== '0',
   pollIntervalMinutes: parseInt(process.env.POLL_INTERVAL_MINUTES || '45', 10),
   // --debug flag works on Windows/Mac/Linux; env var kept for compatibility
   debug: process.env.DEBUG_SCRAPER === '1' || process.argv.includes('--debug'),
+  // When a tender is withdrawn from the portal (retired after 3 missed
+  // checks), delete its alert message from the Telegram group so the group
+  // only shows live tenders. Set DELETE_WITHDRAWN_ALERTS=0 in .env to keep
+  // old alerts instead. NOTE: deleting messages older than 48h requires the
+  // bot to be a GROUP ADMIN with the "Delete messages" permission.
+  deleteWithdrawnAlerts: process.env.DELETE_WITHDRAWN_ALERTS !== '0',
   seenStorePath: fileURLToPath(new URL('../data/seen.json', import.meta.url)),
   debugDir: fileURLToPath(new URL('../debug/', import.meta.url)),
   // Playwright timeouts (ms). The portal can be slow — be generous.

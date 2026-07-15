@@ -11,8 +11,7 @@
     "test-telegram": "node src/notifier.js --test"
   },
   "dependencies": {
-    "playwright": "^1.45.0",
-    "node-cron": "^3.0.3",
-    "dotenv": "^16.4.5"
+    "dotenv": "^16.6.1",
+    "playwright": "^1.45.0"
   }
 }

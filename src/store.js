@@ -82,10 +82,18 @@ export function isReReleased(key) {
   return key in store.retired;
 }
 
-/** Record a tender as alerted (or silently recorded on first run). */
-export function markSent(key) {
+/**
+ * Record a tender as alerted (or silently recorded on first run).
+ * msgId is the Telegram message_id of the alert, kept so the alert can be
+ * deleted from the group if the tender is later withdrawn from the portal.
+ */
+export function markSent(key, msgId = null) {
   delete store.retired[key];
-  store.tenders[key] = { lastSeen: new Date().toISOString(), missing: 0 };
+  store.tenders[key] = {
+    lastSeen: new Date().toISOString(),
+    missing: 0,
+    ...(msgId ? { msgId } : {}),
+  };
   save();
 }
 
@@ -96,7 +104,8 @@ export function markSent(key) {
  * a re-alert flood later.
  */
 export function sweepMissing(searchId, currentKeys, scrapeOk) {
-  if (!scrapeOk) return;
+  const retiredNow = []; // [{ key, msgId }] — returned so alerts can be deleted
+  if (!scrapeOk) return retiredNow;
   const now = new Date().toISOString();
   const prefix = `${searchId}::`;
   let changed = false;
@@ -111,6 +120,7 @@ export function sweepMissing(searchId, currentKeys, scrapeOk) {
       meta.missing = (meta.missing || 0) + 1;
       changed = true;
       if (meta.missing >= MISSING_LIMIT) {
+        retiredNow.push({ key, msgId: meta.msgId || null });
         delete store.tenders[key];
         store.retired[key] = now;
         console.log(
@@ -131,6 +141,7 @@ export function sweepMissing(searchId, currentKeys, scrapeOk) {
   }
 
   if (changed) save();
+  return retiredNow;
 }
 
 /**

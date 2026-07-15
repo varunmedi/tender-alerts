@@ -55,6 +55,28 @@ export async function sendTelegram(text) {
   return body;
 }
 
+/** Delete a previously sent alert (used when a tender is withdrawn). */
+export async function deleteTelegramMessage(messageId) {
+  const res = await fetch(
+    `https://api.telegram.org/bot${CONFIG.telegramBotToken}/deleteMessage`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: CONFIG.telegramChatId,
+        message_id: messageId,
+      }),
+    }
+  );
+  const body = await res.json();
+  if (!body.ok) {
+    // Common causes: message older than 48h and bot is not a group admin,
+    // or the message was already deleted manually.
+    throw new Error(`deleteMessage failed: ${JSON.stringify(body)}`);
+  }
+  return body;
+}
+
 /** Small delay helper so we respect Telegram's ~20 msg/min group limit. */
 export const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 

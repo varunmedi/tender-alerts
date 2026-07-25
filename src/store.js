@@ -66,21 +66,44 @@ function migrate(raw) {
   return out;
 }
 
+function validateStore(st) {
+  const bad = [];
+  if (typeof st.tenders !== 'object' || Array.isArray(st.tenders)) bad.push('tenders');
+  if (typeof st.retired !== 'object' || Array.isArray(st.retired)) bad.push('retired');
+  if (!Array.isArray(st.searches) || st.searches.some((x) => typeof x !== 'string')) bad.push('searches');
+  for (const m of Object.values(st.tenders || {})) {
+    if (!Number.isInteger(m.missing) || m.missing < 0) bad.push('tenders.missing');
+  }
+  for (const r of Object.values(st.retired || {})) {
+    if (!['pending', 'done', 'failed'].includes(r.notify)) bad.push('retired.notify');
+  }
+  if (bad.length) throw new Error(`schema invalid: ${[...new Set(bad)].join(', ')}`);
+  return st;
+}
+
 function load() {
+  let text;
   try {
-    return migrate(JSON.parse(fs.readFileSync(CONFIG.seenStorePath, 'utf8')));
+    text = fs.readFileSync(CONFIG.seenStorePath, 'utf8');
   } catch (error) {
     if (error.code === 'ENOENT') return migrate(null);
-    // Corrupt or unreadable: preserve evidence, start fresh, surface warning.
+    // Permission / disk / IO errors are NOT recoverable by starting fresh —
+    // the first save would fail anyway. Fail loudly.
+    throw new Error(`Cannot read state file ${CONFIG.seenStorePath}: ${error.code || error.message}`);
+  }
+  try {
+    return validateStore(migrate(JSON.parse(text)));
+  } catch (error) {
+    // Malformed JSON / invalid schema: preserve evidence, start fresh, warn.
     try {
       const backup = `${CONFIG.seenStorePath}.corrupt-${Date.now()}`;
-      fs.copyFileSync(CONFIG.seenStorePath, backup);
+      fs.writeFileSync(backup, text);
       storeLoadWarning =
-        `State file was corrupt/unreadable (${error.message}). ` +
-        `Backed up to ${path.basename(backup)} and started fresh — all searches ` +
-        `will silently re-baseline this cycle (a few alerts may be missed once).`;
+        `State file was corrupt (${error.message}). Backed up to ` +
+        `${path.basename(backup)} and started fresh — all searches will ` +
+        `silently re-baseline this cycle (a few alerts may be missed once).`;
     } catch {
-      storeLoadWarning = `State file unreadable (${error.message}); started fresh.`;
+      storeLoadWarning = `State file corrupt (${error.message}); started fresh.`;
     }
     console.error(`[store] ${storeLoadWarning}`);
     return migrate(null);
@@ -106,15 +129,26 @@ export function isReReleased(key) {
   return key in store.retired;
 }
 
-export function markSent(key, msgId = null, fp = null) {
+export function markSent(key, msgId = null, fp = null, snapshot = null) {
   delete store.retired[key];
   store.tenders[key] = {
     lastSeen: new Date().toISOString(),
     missing: 0,
     ...(msgId ? { msgId, sentAt: new Date().toISOString() } : {}),
     ...(fp ? { fp } : {}),
+    ...(snapshot ? { snapshot } : {}),
   };
   save();
+}
+
+/** Snapshot (e.g. title) of a known tender, for tombstones/edits. */
+export function getSnapshot(key) {
+  return store.tenders[key]?.snapshot ?? store.retired[key]?.snapshot ?? null;
+}
+
+/** msgId of a known live tender (for editing its original alert). */
+export function getMsgId(key) {
+  return store.tenders[key]?.msgId ?? null;
 }
 
 // ---------------- amendment detection ----------------
@@ -161,6 +195,7 @@ export function sweepMissing(searchId, currentKeys, scrapeOk) {
           retiredAt: now,
           msgId: meta.msgId || null,
           sentAt: meta.sentAt || null,
+          snapshot: meta.snapshot || null,
           notify: meta.msgId ? 'pending' : 'done',
           attempts: 0,
         };
@@ -196,21 +231,25 @@ export function getPendingRetirements(searchId) {
 }
 
 /** Record a cleanup attempt outcome; gives up after NOTIFY_MAX_ATTEMPTS. */
+/** Returns 'done' | 'pending' | 'gave-up' so the caller can warn ops. */
 export function markRetirementNotified(key, success) {
   const entry = store.retired[key];
-  if (!entry) return;
+  if (!entry) return 'done';
+  let outcome;
   if (success) {
     entry.notify = 'done';
+    outcome = 'done';
   } else {
     entry.attempts = (entry.attempts || 0) + 1;
     if (entry.attempts >= NOTIFY_MAX_ATTEMPTS) {
-      entry.notify = 'done';
-      console.warn(
-        `[store] giving up on group cleanup for ${key} after ${NOTIFY_MAX_ATTEMPTS} attempts.`
-      );
+      entry.notify = 'failed'; // visible in the state file, not silently dropped
+      outcome = 'gave-up';
+    } else {
+      outcome = 'pending';
     }
   }
   save();
+  return outcome;
 }
 
 // ---------------- per-search baselines ----------------

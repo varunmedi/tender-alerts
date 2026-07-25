@@ -1,4 +1,20 @@
 import 'dotenv/config';
+
+// Strict integer env parsing (#12): parseInt('15minutes') === 15 would
+// silently pass — require the WHOLE value to be digits.
+const envErrors = [];
+function envInt(name, fallback) {
+  const raw = process.env[name];
+  if (raw == null || raw === '') return fallback;
+  if (!/^-?\d+$/.test(raw.trim())) {
+    envErrors.push(`${name}="${raw}" is not a valid integer`);
+    return NaN;
+  }
+  return parseInt(raw.trim(), 10);
+}
+export function getEnvErrors() {
+  return envErrors;
+}
 import { fileURLToPath } from 'url';
 
 /**
@@ -54,13 +70,13 @@ export const CONFIG = {
   // every ACTIVE_INTERVAL_MINUTES. Nights & Sundays: QUIET_INTERVAL_MINUTES.
   // Departments publish tenders during working hours, so this gives 3×
   // faster detection when it matters while REDUCING total portal load.
-  activeStartHour: parseInt(process.env.ACTIVE_START_HOUR || '9', 10),
-  activeEndHour: parseInt(process.env.ACTIVE_END_HOUR || '19', 10),
-  activeIntervalMin: parseInt(process.env.ACTIVE_INTERVAL_MINUTES || '15', 10),
-  quietIntervalMin: parseInt(process.env.QUIET_INTERVAL_MINUTES || '60', 10),
+  activeStartHour: envInt('ACTIVE_START_HOUR', 9),
+  activeEndHour: envInt('ACTIVE_END_HOUR', 19),
+  activeIntervalMin: envInt('ACTIVE_INTERVAL_MINUTES', 15),
+  quietIntervalMin: envInt('QUIET_INTERVAL_MINUTES', 60),
   // Legacy fallback (used if ADAPTIVE_SCHEDULE=0 in .env)
   adaptiveSchedule: process.env.ADAPTIVE_SCHEDULE !== '0',
-  pollIntervalMinutes: parseInt(process.env.POLL_INTERVAL_MINUTES || '45', 10),
+  pollIntervalMinutes: envInt('POLL_INTERVAL_MINUTES', 45),
   // --debug flag works on Windows/Mac/Linux; env var kept for compatibility
   // --debug: extra artifacts (screenshots/dumps), still headless — server-safe.
   // --headed: visible browser window — laptop/desktop only.
@@ -72,7 +88,9 @@ export const CONFIG = {
   // old alerts instead. NOTE: deleting messages older than 48h requires the
   // bot to be a GROUP ADMIN with the "Delete messages" permission.
   deleteWithdrawnAlerts: process.env.DELETE_WITHDRAWN_ALERTS !== '0',
-  seenStorePath: fileURLToPath(new URL('../data/seen.json', import.meta.url)),
+  seenStorePath:
+    process.env.SEEN_STORE_PATH ||
+    fileURLToPath(new URL('../data/seen.json', import.meta.url)),
   debugDir: fileURLToPath(new URL('../debug/', import.meta.url)),
   // Playwright timeouts (ms). The portal can be slow — be generous.
   navTimeout: 60_000,
@@ -80,7 +98,7 @@ export const CONFIG = {
 };
 
 export function assertConfig() {
-  const errors = [];
+  const errors = [...envErrors];
   if (!CONFIG.telegramBotToken) errors.push('TELEGRAM_BOT_TOKEN is missing');
   if (!CONFIG.telegramChatId) errors.push('TELEGRAM_CHAT_ID is missing');
   else if (!/^-?\d+$/.test(String(CONFIG.telegramChatId))) {

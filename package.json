@@ -8,13 +8,15 @@
     "start": "node src/index.js",
     "once": "node src/index.js --once",
     "debug": "node src/index.js --once --debug",
-    "test-telegram": "node src/notifier.js --test"
+    "test-telegram": "node src/notifier.js --test",
+    "headed": "node src/index.js --once --headed",
+    "test": "node --test"
   },
   "dependencies": {
     "dotenv": "^16.6.1",
     "playwright": "^1.61.0"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=24 <25"
   }
 }

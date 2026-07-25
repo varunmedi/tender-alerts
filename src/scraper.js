@@ -58,57 +58,7 @@ async function screenshot(page, name) {
   }
 }
 
-// ------------------- tender extraction (unchanged logic) -------------------
-
-const TENDER_KEY_HINTS = [
-  'tender', 'nit', 'work', 'department', 'closing', 'publish', 'emd', 'ecv', 'notice',
-];
-
-function extractTenderArray(json) {
-  const looksLikeTender = (obj) => {
-    if (!obj || typeof obj !== 'object') return false;
-    const keys = Object.keys(obj).join(' ').toLowerCase();
-    return TENDER_KEY_HINTS.filter((h) => keys.includes(h)).length >= 2;
-  };
-  const search = (node) => {
-    if (Array.isArray(node)) {
-      if (node.length && looksLikeTender(node[0])) return node;
-      for (const item of node) {
-        const found = search(item);
-        if (found) return found;
-      }
-    } else if (node && typeof node === 'object') {
-      for (const v of Object.values(node)) {
-        const found = search(v);
-        if (found) return found;
-      }
-    }
-    return null;
-  };
-  return search(json);
-}
-
-function normalizeFromJson(raw) {
-  const get = (...hints) => {
-    for (const [k, v] of Object.entries(raw)) {
-      const lk = k.toLowerCase();
-      if (hints.some((h) => lk.includes(h)) && v != null && v !== '') return String(v);
-    }
-    return null;
-  };
-  return {
-    tenderId: get('tenderid', 'tender_id', 'nitno', 'nit_no', 'tendernumber', 'refno'),
-    noticeNumber: get('notice'),
-    category: get('category'),
-    title: get('tendername', 'workname', 'nameofwork', 'title', 'description') || 'Untitled tender',
-    department: get('department', 'organisation', 'organization'),
-    publishedDate: get('publish', 'startdate', 'releasedate', 'bidstart'),
-    closingDate: get('closing', 'lastdate', 'enddate', 'duedate', 'bidsubmission'),
-    value: get('ecv', 'estimat', 'tendervalue', 'contractvalue'),
-    emd: get('emd'),
-    _raw: raw,
-  };
-}
+// ------------------- tender extraction -------------------
 
 /** Columns: 0 Dept | 1 Tender ID | 2 Notice No | 3 Category | 4 Name of Work
  *  | 5 ECV | 6 Start | 7 Closing | 8 Action. ID must be numeric. */
@@ -151,6 +101,40 @@ async function parseResultsTable(page) {
     })
     .catch(() => []);
   return rows.map(rowToTender).filter(Boolean);
+}
+
+/**
+ * Wait for a terminal table state: 'rows' (valid tenders present),
+ * 'empty' (portal explicitly says no records), or 'timeout'.
+ */
+async function waitForTenderTable(page, timeoutMs = 20000) {
+  try {
+    const handle = await page.waitForFunction(
+      () => {
+        const tbody = document.querySelector('#pagetable13 tbody');
+        if (!tbody) return false;
+        const rows = [...tbody.querySelectorAll('tr')];
+        const hasRows = rows.some((row) => {
+          const cells = row.querySelectorAll('td');
+          return cells.length >= 8 && /^\d{4,}$/.test((cells[1]?.textContent || '').trim());
+        });
+        if (hasRows) return 'rows';
+        const text = (tbody.textContent || '').toLowerCase();
+        if (
+          text.includes('no matching records') ||
+          text.includes('no data available') ||
+          text.includes('no records')
+        ) {
+          return 'empty';
+        }
+        return false;
+      },
+      { timeout: timeoutMs }
+    );
+    return await handle.jsonValue();
+  } catch {
+    return 'timeout';
+  }
 }
 
 /** Wait (condition-based) until at least one valid tender row exists. */
@@ -406,19 +390,25 @@ async function setFilters(page, search) {
       .then(() => true)
       .catch(() => false);
 
-    if (appeared) {
-      const subLabel = await selectInSelect(page, '#subDeptId', search.subDepartment);
-      console.log(`[${tag}] sub-department set: ${subLabel}`);
-    } else {
+    if (!appeared) {
       await saveDebug(
         `${tag}-selects.json`,
         JSON.stringify(await describeSelects(page), null, 2)
       );
-      console.warn(
-        `[${tag}] Sub-department "${search.subDepartment}" never appeared — ` +
-          `searching department-only. See debug/${tag}-selects.json.`
+      // HARD FAIL — a department-only fallback would alert unrelated
+      // tenders (silent wrongness). Failing feeds the health monitor.
+      throw new Error(
+        `Sub-department "${search.subDepartment}" never appeared in #subDeptId — ` +
+          `see debug/${tag}-selects.json for available options.`
       );
     }
+    const subLabel = await selectInSelect(page, '#subDeptId', search.subDepartment);
+    if (!subLabel) {
+      throw new Error(
+        `Sub-department "${search.subDepartment}" appeared but could not be selected.`
+      );
+    }
+    console.log(`[${tag}] sub-department set: ${subLabel}`);
   }
   await screenshot(page, `${tag}-02-filters-set`);
 }
@@ -461,11 +451,20 @@ async function applyAndParse(page, search, postCaptures) {
     /* non-fatal */
   }
 
-  await page
-    .waitForSelector('#pagetable13 tbody tr td', { timeout: 25000 })
-    .catch(() => {});
+  // Wait for EITHER terminal state: valid tender rows OR an explicit
+  // "No matching records" — a genuinely empty department returns in
+  // ~1s instead of burning the full timeout every cycle.
+  const state = await waitForTenderTable(page, 20000);
   await screenshot(page, `${tag}-03-results`);
 
+  if (state === 'empty') {
+    console.log(`[${tag}] portal reports no matching records (0 tenders).`);
+    return [];
+  }
+  if (state === 'timeout') {
+    console.warn(`[${tag}] results table reached neither rows nor an empty marker in 20s.`);
+    return [];
+  }
   const tenders = await collectAllPages(page);
   console.log(`[${tag}] extracted ${tenders.length} tenders from results table`);
   return tenders;
@@ -474,11 +473,12 @@ async function applyAndParse(page, search, postCaptures) {
 // ------------------------- public API -------------------------
 
 /**
- * Run ALL configured searches in a single browser + portal session.
- * Returns [{ search, tenders, error }] — one entry per search; a failure
- * in one search never blocks the others.
+ * Run ALL configured searches in a single browser + portal session,
+ * YIELDING each search's result as soon as it completes so the caller
+ * can send alerts while the next search runs. A failure in one search
+ * never blocks the others.
  */
-export async function scrapeAllSearches(searches) {
+export async function* scrapeSearchesStream(searches) {
   const browser = await chromium.launch({
     headless: !CONFIG.debug,
     args: [
@@ -519,44 +519,32 @@ export async function scrapeAllSearches(searches) {
     }
   });
 
-  const jsonResponses = [];
-  context.on('response', async (res) => {
-    try {
-      const ct = res.headers()['content-type'] || '';
-      if (ct.includes('json')) {
-        jsonResponses.push({ url: res.url(), body: await res.json() });
-      }
-    } catch {
-      /* ignore */
-    }
-  });
-
   const page = await context.newPage();
   page.setDefaultTimeout(CONFIG.actionTimeout);
 
-  const results = [];
   let forceFresh = false;
 
   try {
     for (const search of searches) {
       const started = Date.now();
+      let result;
       try {
         await ensureTenderDetails(page, search.id, forceFresh);
         forceFresh = false;
         await setFilters(page, search);
         const tenders = await applyAndParse(page, search, postCaptures);
-        results.push({ search, tenders, error: null });
         console.log(
           `[${search.id}] search completed in ${((Date.now() - started) / 1000).toFixed(1)}s`
         );
+        result = { search, tenders, error: null };
       } catch (e) {
         console.error(`[${search.id}] scrape failed: ${e.message}`);
-        results.push({ search, tenders: [], error: e.message });
         forceFresh = true; // next search re-establishes the session from scratch
+        result = { search, tenders: [], error: e.message };
       }
+      yield result; // caller alerts on this while we move to the next search
     }
   } finally {
     await browser.close();
   }
-  return results;
 }

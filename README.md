@@ -1,30 +1,34 @@
-# AP Tender Alerts → Telegram — Varun's Ops Guide (v3)
+# AP Tender Alerts → Telegram — Varun's Ops Guide (v4)
 
 Self-hosted bot that checks the AP eProcurement portal on an adaptive schedule and
 pings the **"Tenders"** Telegram group when new tenders appear. Withdrawn tenders'
 alerts are auto-deleted so the group only shows live tenders. Runs 24/7 on an
 Oracle Cloud Always Free VM (Hyderabad). Cost: ₹0/month.
 
+**Current production state (verified 25 Jul 2026):** Node.js 24.18.0 LTS ·
+Playwright 1.61 · kernel 6.17.0-1018-oracle · full 4-search cycle ≈ **15 seconds**
+· crash recovery (PM2) and reboot recovery (systemd) both proven by live tests.
+
 ## Tech stack
 
 | Layer | Technology | Why |
 |---|---|---|
-| Runtime | Node.js 20 LTS (ES Modules) | Single runtime for scraping + notifications |
-| Browser automation | Playwright (headless Chromium) | Portal is JS-rendered with session-flow + client-side crypto; a real browser is mandatory |
+| Runtime | Node.js 24 LTS (ES Modules) | Current LTS; single runtime for scraping + notifications |
+| Browser automation | Playwright 1.61 (headless Chromium) | Portal is JS-rendered with session-flow + client-side crypto; a real browser is mandatory |
 | Scheduler | Adaptive in-process `setTimeout` loop | Office-hours vs quiet-hours cadence; no external cron |
-| Notifications | Telegram Bot API (plain HTTPS `fetch`, no SDK) | Free, unlimited group messages; supports send + delete |
-| State/dedup | JSON file (`data/seen.json`), atomic writes | Tiny data volume; no database needed |
+| Pipeline | Async-generator streaming | Each search's alerts send while the next search runs |
+| Notifications | Telegram Bot API (native `fetch`) | Free, unlimited; supports send + delete |
+| State/dedup | JSON file (`data/seen.json`), atomic writes | Tiny data volume; per-tender persistence = crash-safe alerts |
 | Config/secrets | dotenv (`.env`) | Token/chat-id/tuning kept out of code |
 | Process manager | PM2 + systemd (`pm2-ubuntu`) + pm2-logrotate | Auto-restart, resurrect on reboot, bounded logs |
 | Hosting | Oracle Cloud Always Free — VM.Standard.E2.1.Micro, Ubuntu 24.04, 2 GB swap, Hyderabad | ₹0 forever; **Indian IP required** (portal is geo-restricted) |
 
-> **Why not Go/Rust/Bun/Quarkus/Express/Fastify?** ~99% of each cycle is spent
-> waiting on the portal's network responses and Chromium rendering — costs that are
-> identical in every language. Web-server frameworks (Express/Fastify/Gin/Fiber/
-> Actix/Axum/Quarkus) solve HTTP-serving, which this bot doesn't do. The only true
-> speed lever would be replacing the browser with raw HTTP calls — rejected as a
-> fragility trap because the portal's `temp()` client-side encryption + CSRF tokens
-> would have to be re-implemented and kept in sync. Node + Playwright is optimal here.
+> **Why not Go/Rust/Bun/Quarkus/Express/Fastify?** ~99% of each cycle is portal
+> network latency + Chromium rendering — identical in every language. Web-server
+> frameworks solve HTTP-serving, which this bot doesn't do. A raw-HTTP scraper was
+> evaluated twice (including a browser-cookie `context.request` hybrid) and
+> rejected: the portal's `temp()` anti-tamper encryption + per-page CSRF chaining
+> would need re-implementing and maintaining. Node + Playwright is optimal here.
 
 ## Watched searches (src/config.js)
 
@@ -36,7 +40,10 @@ Oracle Cloud Always Free VM (Hyderabad). Cost: ₹0/month.
 | `aptransco-telecom` | APTRANSCO PRODUCTS | Superintending Engineer Telecommunication Circle, Visakhapatnam |
 
 Dropdown matching is whitespace-insensitive; exact match preferred, then prefix,
-then contains (prevents "…Smart City Corporation" false matches).
+then contains (handles the portal's "APTRANSCO   PRODUCTS" triple-space and
+prevents "…Smart City Corporation" false matches). Known dept/sub-dept IDs:
+GVMC=49 (E.E.- Electrical=74, IT=5889), VMRDA=14 (EE-VIII=5520),
+APTRANSCO=1766 (SE Telecom=1781).
 
 ## My values (quick reference)
 
@@ -44,92 +51,86 @@ then contains (prevents "…Smart City Corporation" false matches).
 |---|---|
 | Telegram bot | `@ap_tender_alerts_bot` |
 | Bot token | `8550919760:AAEgdJFNaDL25Jl4_1jojxAmN4fS2c4ZVO8` |
-| Telegram group | "Tenders", chat ID: `-5341406269` |
+| Telegram group | "Tenders", chat ID: `-5341406269` — **bot is group admin** (needed for alert deletion) |
 | Server public IP | `140.245.246.22` (ephemeral — may change on stop/start) |
 | SSH | `ssh -i C:\Users\varun\Downloads\tenders\files\ap-tender-alerts-v2\ap-tender-alerts\keys\private\ssh-key-2026-07-13.key ubuntu@140.245.246.22` |
 | Project path (server) | `/home/ubuntu/ap-tender-alerts` |
 
 > ⚠️ The bot token is a secret (rotate via @BotFather `/revoke` if exposed, then
 > update `.env` and `pm2 restart tender-alerts`). The SSH private key is
-> unrecoverable — keep a backup.
+> unrecoverable — keep a backup. Never commit `.env` or `keys/` to any repository.
 
 ## How it works (final architecture)
 
 ```
 adaptive schedule (overlap-guarded; PM2 keeps alive; systemd survives reboots)
   └─ ONE browser + ONE portal session for the WHOLE cycle:
-       Playwright opens login.html (session cookie minted; images/fonts blocked)
+       Playwright opens login.html (session minted; images/media/fonts blocked)
          └─ executes the portal's own "More..." handler directly:
               loginForm.hdnType="current"; temp(tempName,'loginForm');
               POST → TenderDetailsHome.html         (session-flow REQUIRED)
        then for EACH of the 4 searches (reusing that one session):
-         └─ Advancedsearch() → dropdowns appear
-              └─ select Department → getCircles() AJAX loads sub-depts → select
-                   └─ advsearchBtn() DIRECTLY (Apply & Search share duplicate
-                      id="searchTender"!) → full page reload → results
-                        └─ parse #pagetable13 (DataTables) + pagination
-                             └─ lifecycle store (data/seen.json)
-                                  └─ new/re-released → Telegram; withdrawn → delete
+         └─ Advancedsearch() → select Department → getCircles() AJAX → sub-dept
+              (sub-dept failure = HARD search failure — never dept-wide fallback)
+                └─ advsearchBtn() DIRECTLY (Apply & Search share duplicate
+                   id="searchTender"!) → full page reload → results
+                     └─ wait for rows OR explicit "No matching records"
+                        (empty depts resolve in ~1s, not a 20s timeout)
+                          └─ parse #pagetable13 + pagination
+                               └─ YIELD result → alerts send immediately
+                                    while the next search already runs
+                                      └─ lifecycle store → Telegram
+                                         (new 🔔 / re-released 🔁 / withdrawn → delete)
 ```
 
 ### Adaptive scheduling
-- **Mon–Sat, 09:00–19:00 IST:** check every **15 min** (departments publish then)
-- **Nights & Sundays:** every **60 min**
-- 10-minute politeness floor enforced in code
-- Fewer total requests/day than fixed 45-min polling, yet 3× faster detection in hours
+- **Mon–Sat, 09:00–19:00 IST:** every **15 min** · **nights & Sundays:** every **60 min**
+- 10-minute politeness floor; fewer total requests/day than the old fixed 45-min polling
 - Tune in `.env`: `ACTIVE_START_HOUR`, `ACTIVE_END_HOUR`, `ACTIVE_INTERVAL_MINUTES`,
-  `QUIET_INTERVAL_MINUTES`, or `ADAPTIVE_SCHEDULE=0` to revert to `POLL_INTERVAL_MINUTES`
+  `QUIET_INTERVAL_MINUTES`, or `ADAPTIVE_SCHEDULE=0` → fixed `POLL_INTERVAL_MINUTES`
 
-### Performance design (v3)
-- **Single session per cycle** — the login→More→TenderDetails chain runs ONCE;
-  all four searches reuse the page (a failed search re-establishes the session)
-- **Condition-based waits** — waits for the actual element/AJAX/rows, not fixed
-  timers (each search logs `search completed in X.Xs`)
-- **Resource blocking** — images/media/fonts aborted at network layer (faster
-  loads, less RAM on the 1 GB box)
-- Typical full cycle: **~60–90s** (was ~4 min); detection latency 15 min in hours
+### Performance design
+- Single session per cycle; condition-based waits (no fixed sleeps); resource
+  blocking; one-round-trip table parse; streamed results (alerts for search #1
+  send while search #2 runs); instant empty-table detection
+- **Measured: full 4-search cycle ≈ 15s** (8.3 + 2.1 + 2.6 + 1.8s on 25 Jul 2026)
+- Per-search timing logged: `search completed in X.Xs`
 
 ### Tender lifecycle (retire / re-release)
-- **New tender** → 🔔 alert → recorded in `tenders` (with its Telegram message_id)
-- **Absent from 3 consecutive successful scrapes** (~45 min in office hours) →
-  moved to `retired`; logged `[store] retired …`
-- **Reappears while retired** → alerts again as **🔁 Re-released Tender**
-- Retired entries pruned after 365 days
-- Failed/empty scrapes NEVER age entries (no false re-alerts from hiccups)
-- Tune: `MISSING_LIMIT` in `src/store.js` (3 = ~45 min in hours; 2 ≈ 30 min)
+- **New tender** → 🔔 alert → recorded in `tenders` (with Telegram message_id)
+- **Absent from 3 consecutive successful scrapes** (~45 min office hours) →
+  `retired`; logged `[store] retired …`
+- **Reappears while retired** → **🔁 Re-released Tender** alert
+- Retired entries pruned after 365 days; failed/empty scrapes NEVER age entries
+- Tune: `MISSING_LIMIT` in `src/store.js`
 
-### Auto-delete withdrawn alerts
-- When a tender is retired (taken down from the portal), its ORIGINAL alert is
-  **deleted from the group** → group shows only live tenders; log:
-  `deleted group alert for withdrawn …`
-- **Requires the bot to be a group ADMIN** with "Delete messages" permission
-  (Telegram forbids deleting others'/old >48h messages otherwise)
-- Only alerts sent by the auto-delete-capable code have a stored message_id;
-  older alerts are skipped (clear those once, manually)
-- Disable with `DELETE_WITHDRAWN_ALERTS=0` in `.env` to keep a permanent history
+### Auto-delete withdrawn alerts (proven live)
+- Retired tender → its alert is **deleted from the group**; log:
+  `deleted group alert for withdrawn …` (verified: 5 deletions in one pass, 25 Jul)
+- Requires bot = group ADMIN with "Delete messages" (done)
+- Disable with `DELETE_WITHDRAWN_ALERTS=0` for a permanent history
 
-### Per-search silent baseline
-Each search's FIRST successful check records existing tenders silently — adding a
-new department never floods the group.
+### Correctness guarantees
+- **Sub-department selection failure = hard search failure** — never a silent
+  department-wide search that would alert unrelated tenders
+- Per-tender state writes = crash-safe (a mid-batch crash never re-sends alerts)
+- Per-search silent baselines — adding a department never floods the group
+- Overlap guard — never two Chromium sessions at once
+- Atomic seen.json writes (temp + rename)
 
-### Self-monitoring (health alerts to the group)
-- 6 consecutive unhealthy checks for a search (error OR 0 tenders) → one ⚠️ warning
-- Next healthy check → ✅ recovery message
-- Counters reset on restart (restart triggers an immediate check anyway)
-
-### Reliability hardening
-- **Overlap guard**: a long cycle makes the next tick skip (never two Chromiums at once)
-- **Atomic seen.json writes** (temp file + rename; corruption-proof)
-- **pm2-logrotate** installed: logs can't fill the disk
+### Self-monitoring
+- 6 consecutive unhealthy checks (error OR 0 tenders) → one ⚠️ with the error
+  detail and **real elapsed duration** (timestamp-based) · recovery → ✅
+- Note: an actually-empty department (e.g. APTRANSCO Telecom some weeks) triggers
+  one informative ⚠️; it self-resolves with ✅ when a tender appears
 
 ### Portal quirks (why the code is shaped this way)
 - Deep links bounce to `SessionTimeOut.jsp`; entry must be via `login.html`
-- Searches from a direct-GET page return 0 results — More... POST flow is mandatory
+- Searches from a direct-GET page return 0 results — More... POST flow mandatory
 - Apply = `advsearchBtn()` = full page reload with server-rendered results
 - Duplicate `id="searchTender"` on Search AND Apply buttons
-- Table headers wrap ("Tender\nID") — parser normalizes whitespace
-- Rows validated: Tender ID must be numeric (rejects filter-row junk)
-- Portal is geo-restricted to Indian IPs
+- Table headers wrap ("Tender\nID"); rows validated by numeric Tender ID
+- Geo-restricted to Indian IPs
 
 ## Daily operations (server)
 
@@ -142,16 +143,13 @@ pm2 restart tender-alerts                       # restart = immediate check
 
 ### Test an alert end-to-end
 ```bash
-nano ~/ap-tender-alerts/data/seen.json
-# delete ONE entry inside "tenders": { ... } — keep JSON valid
+nano ~/ap-tender-alerts/data/seen.json   # delete ONE entry inside "tenders": {...}
 pm2 restart tender-alerts && pm2 logs tender-alerts
 ```
-Expect `1 new alert(s) sent`; the ID re-records automatically.
 
 ### Add another department
-`nano ~/ap-tender-alerts/src/config.js` → append to `SEARCHES` with a unique `id`
-and the portal's exact dropdown texts → `pm2 restart tender-alerts`. Its first
-check baselines silently.
+Append to `SEARCHES` in `src/config.js` (unique `id`, exact dropdown texts) →
+`pm2 restart tender-alerts`. First check baselines silently.
 
 ### Push code changes from the laptop
 ```powershell
@@ -160,44 +158,55 @@ scp -i keys\private\ssh-key-2026-07-13.key .\src\<file>.js ubuntu@140.245.246.22
 ```
 then `pm2 restart tender-alerts`.
 
+### Runtime upgrades (done 25 Jul 2026 — repeat pattern for future majors)
+```bash
+curl -fsSL https://deb.nodesource.com/setup_XX.x | sudo -E bash -
+sudo apt-get install -y nodejs
+sudo npm install -g pm2 && pm2 update
+cd ~/ap-tender-alerts && npm install && npx playwright install chromium && sudo npx playwright install-deps
+node src/index.js --once          # verify all searches healthy
+pm2 resurrect && pm2 status && pm2 save   # resurrect BEFORE save if daemon respawned empty!
+sudo reboot                        # then verify: pm2 status / systemctl status pm2-ubuntu
+```
+**Lesson learned:** after `pm2 update`/Node upgrades the daemon can respawn empty —
+if `pm2 restart` says "not found", run `pm2 resurrect` FIRST; only `pm2 save` once
+the process list is correct (saving an empty list overwrites the good dump).
+
 ## Troubleshooting
 
-- **⚠️ health alert arrived** → `pm2 logs tender-alerts --lines 60 --nostream`.
-  Check `debug/<search>-post-auto.txt`; healthy flags:
-  `hdnSearch=1 | hdnSearch4=4 | hdnadvsearch=1 | hdnnoSearch=` with
-  `nDepartmentID=49` (GVMC) / `14` (VMRDA), `subDeptId=74` (E.E.- Electrical).
-  `hdnnoSearch=1` ⇒ wrong button fired.
-- **`Department "..." not found`** → `cat debug/<search>-selects.json` lists every
-  dropdown option; copy the exact text into config.js.
-- **Withdrawn alerts not deleting** → `could not delete alert … (is the bot a
-  group admin…)` means the bot needs admin + "Delete messages" permission; also,
-  alerts sent before this feature have no message_id and are skipped.
+- **⚠️ health alert** → `pm2 logs tender-alerts --lines 60 --nostream`; check
+  `debug/<search>-post-auto.txt`. Healthy flags:
+  `hdnSearch=1 | hdnSearch4=4 | hdnadvsearch=1 | hdnnoSearch=` (`hdnnoSearch=1` ⇒
+  wrong button fired). Dept/sub-dept IDs listed above.
+- **`Department/Sub-department "..." not found`** → `cat debug/<search>-selects.json`
+  lists real dropdown options; copy exact text into config.js.
+- **Withdrawn alerts not deleting** → bot must be group admin with "Delete
+  messages"; alerts sent before msgId tracking are skipped.
 - **Deep diagnosis** → `node src/index.js --once --debug` (headed browser, step
-  screenshots, waits for a MANUAL Apply click to compare POSTs). Copy artifacts:
-  `scp -i <key> ubuntu@140.245.246.22:~/ap-tender-alerts/debug/* .`
-- **Telegram 403** = bot removed from group; **400 chat not found** = wrong chat id.
-- **Server unreachable** → Oracle console: instance Running? IP changed after a
-  stop/start? Act on any idle-reclamation email.
-- **Memory** → `free -h` must show `Swap: 2.0Gi` (`sudo swapon /swapfile`).
-- **seen.json corrupted/deleted** → fails safe: all searches silently re-baseline
-  (a few hours of missed alerts at worst, no flood).
+  screenshots, manual-Apply POST comparison).
+- **Telegram 403** = bot removed from group; **400** = wrong chat id.
+- **Server unreachable** → Oracle console (instance Running? IP changed?); act on
+  any idle-reclamation email.
+- **Memory** → `free -h` must show `Swap: 2.0Gi`.
+- **seen.json corrupted/deleted** → fails safe: silent re-baseline, no flood.
 
 ## Known limitations (accepted)
 
-- **Corrigendums/amendments don't re-alert** (same ID, edited in place — e.g.
-  extended closing date). Future enhancement: watch the corrigendum tab.
-- **Alerts link to the portal home**, not the tender (portal forbids deep links).
-- A genuinely empty department triggers ONE ⚠️ after 6 checks (informative, not noise).
-- Auto-delete has a ~45-min confirmation delay (the 3-check grace period) by design.
+- Corrigendums/amendments (same-ID in-place edits) don't re-alert — future
+  enhancement: watch the corrigendum tab
+- Alerts link to the portal home (portal forbids deep links)
+- Auto-delete has ~45-min confirmation delay (3-check grace) by design
 
 ## File map (server: ~/ap-tender-alerts)
 
 ```
-src/config.js     ← the four searches, schedule settings, feature flags, env
-src/scraper.js    ← Playwright: single-session, condition waits, resource blocking, #pagetable13
+src/config.js     ← searches, schedule settings, feature flags, env
+src/scraper.js    ← Playwright: single-session async generator, condition waits,
+                    resource blocking, empty-detection, hard sub-dept fail
 src/store.js      ← lifecycle dedup: tenders/retired/searches, message_ids, atomic writes
 src/notifier.js   ← Telegram send (🔔/🔁) + deleteMessage
-src/index.js      ← orchestrator, adaptive scheduler, overlap guard, health alerts, auto-delete
+src/index.js      ← streaming orchestrator, adaptive scheduler, overlap guard,
+                    timestamp-based health alerts, auto-delete
 .env              ← token, chat id, schedule + feature tuning
 data/seen.json    ← v2 lifecycle store
 debug/            ← POST captures, screenshots, HTML dumps (safe to delete)
@@ -206,18 +215,25 @@ debug/            ← POST captures, screenshots, HTML dumps (safe to delete)
 ## Changelog
 
 - **v1 (12 Jul 2026)** — Initial build: Playwright scraper (GVMC E.E.-Electrical +
-  all-VMRDA), Telegram alerts, flat-array dedup, first-run silent baseline.
-  Debugging milestones: SessionTimeOut session flow, ad popup, More... handler
-  replication (login_emudhra.js), duplicate id="searchTender" bug, DataTables
-  #pagetable13 parsing, Windows path fixes.
+  all-VMRDA), Telegram alerts, flat-array dedup. Debugging milestones:
+  SessionTimeOut session flow, ad popup, More... handler replication
+  (login_emudhra.js), duplicate id="searchTender" bug, DataTables #pagetable13
+  parsing, Windows path fixes.
 - **v1.1 (13 Jul 2026)** — Deployed to Oracle Cloud Hyderabad (Indian IP required);
   PM2 + systemd reboot survival verified by live reboot test.
-- **v2 (14 Jul 2026)** — Tender lifecycle store (retire after 3 missed checks; 🔁
-  re-release alerts; 365-day pruning; auto v1 migration). Four searches (added GVMC
-  IT + APTRANSCO Telecom; VMRDA narrowed to EE-VIII Electrical). Per-search silent
-  baselines. Self-monitoring ⚠️/✅ health alerts. Overlap guard. Atomic writes.
-  pm2-logrotate. Auto-delete of withdrawn tenders' alerts (bot admin required).
+- **v2 (14 Jul 2026)** — Lifecycle store (retire / 🔁 re-release / 365-day pruning /
+  auto v1 migration). Four searches. Per-search silent baselines. Health ⚠️/✅
+  alerts. Overlap guard. Atomic writes. pm2-logrotate. Auto-delete of withdrawn
+  tenders' alerts.
 - **v3 (14 Jul 2026)** — Performance rewrite: single browser+session per cycle,
-  condition-based waits (no fixed sleeps), image/media/font blocking, single-round
-  table parse. Adaptive scheduling (15 min office hours / 60 min otherwise).
-  node-cron dependency removed. Cycle ~4 min → ~60–90s; detection 45 → 15 min.
+  condition-based waits, resource blocking, one-round table parse. Adaptive
+  scheduling (15/60 min). node-cron removed. Cycle ~4 min → ~60–90s.
+- **v4 (25 Jul 2026)** — External-review improvements: streamed async-generator
+  pipeline (alerts send while next search runs), instant empty-table detection,
+  hard-fail on sub-department selection, dead JSON-listener removed,
+  timestamp-based health durations, Telegram pause only between messages.
+  Runtime upgraded: Node 20 → **24.18.0 LTS**, Playwright 1.45 → **1.61**, kernel
+  updated; PM2 migrated; reboot recovery re-verified live. Measured cycle: **~15s**.
+  Rejected on review (documented rationale): batched state writes (breaks crash-
+  safety), hashed keys (breaks per-search sweep; parser guarantees numeric IDs),
+  HTTP fast path (anti-tamper fragility).

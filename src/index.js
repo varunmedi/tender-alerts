@@ -1,23 +1,25 @@
-
 import { CONFIG, SEARCHES, assertConfig } from './config.js';
-import { scrapeAllSearches } from './scraper.js';
+import { scrapeSearchesStream } from './scraper.js';
 import { isNewTender, isReReleased, markSent, sweepMissing, isFirstRunFor, markSearchKnown } from './store.js';
 import { sendTelegram, deleteTelegramMessage, formatTenderMessage, pause } from './notifier.js';
 
 /**
  * Orchestrator:
- *   node src/index.js --once   → single check (good for cron / testing)
- *   node src/index.js          → runs forever, checking every
- *                                POLL_INTERVAL_MINUTES (good for PM2)
+ *   node src/index.js --once   → single check (good for testing)
+ *   node src/index.js          → runs forever on the adaptive schedule
+ *
+ * Results STREAM from the scraper (async generator): each search's
+ * tenders are alerted the moment that search finishes, instead of
+ * waiting for the whole cycle — first alert arrives up to ~1 min sooner.
  */
 
 // ---- self-monitoring ----
-// After this many consecutive unhealthy cycles for a search (scrape threw,
-// OR returned zero tenders), send ONE warning to the Telegram group. A
-// healthy cycle after a warning sends a recovery note. In-memory counters
-// (reset on restart) are fine: a restart triggers an immediate check anyway.
+// After FAIL_NOTIFY_AT consecutive unhealthy checks for a search (scrape
+// threw OR returned zero tenders), send ONE warning to the group; the next
+// healthy check sends a recovery note. Failure DURATION is measured from
+// real timestamps, so the message stays accurate whatever the schedule.
 const FAIL_NOTIFY_AT = 6;
-const failStreak = {};
+const failState = {}; // id -> { count, firstAt }
 
 async function notifyHealth(text) {
   try {
@@ -27,23 +29,30 @@ async function notifyHealth(text) {
   }
 }
 
+function humanDuration(ms) {
+  const mins = Math.round(ms / 60000);
+  return mins >= 90 ? `${(mins / 60).toFixed(1)} h` : `${mins} min`;
+}
+
 async function trackHealth(search, ok, detail) {
-  const id = search.id;
+  const st = failState[search.id] || (failState[search.id] = { count: 0, firstAt: null });
   if (ok) {
-    if ((failStreak[id] || 0) >= FAIL_NOTIFY_AT) {
+    if (st.count >= FAIL_NOTIFY_AT) {
       await notifyHealth(
         `✅ <b>Tender bot recovered</b> — "${search.label}" is returning results again.`
       );
     }
-    failStreak[id] = 0;
+    st.count = 0;
+    st.firstAt = null;
     return;
   }
-  failStreak[id] = (failStreak[id] || 0) + 1;
-  if (failStreak[id] === FAIL_NOTIFY_AT) {
+  if (st.count === 0) st.firstAt = Date.now();
+  st.count += 1;
+  if (st.count === FAIL_NOTIFY_AT) {
     await notifyHealth(
       `⚠️ <b>Tender bot needs attention</b>\n` +
         `"${search.label}" has had ${FAIL_NOTIFY_AT} consecutive unhealthy checks ` +
-        `(~${Math.round((FAIL_NOTIFY_AT * 45) / 60)}h).\n` +
+        `over ~${humanDuration(Date.now() - st.firstAt)}.\n` +
         `Last issue: ${detail}\n\n` +
         `Either the department genuinely has no live tenders right now, or the ` +
         `portal changed and the scraper needs a fix. ` +
@@ -53,17 +62,94 @@ async function trackHealth(search, ok, detail) {
 }
 
 function tenderKey(t, searchId) {
-  // Prefer the portal's tender ID; fall back to a title hash so we
-  // still dedup even if the ID column wasn't parsed.
+  // The parser guarantees a numeric tenderId (rows without one are
+  // rejected), so this is stable; title fallback is a last-resort only.
   return `${searchId}::${t.tenderId || t.title}`;
 }
+
+// ---- per-search processing (called as each search's results stream in) ----
+
+async function processSearchResult({ search, tenders, error }) {
+  const firstRun = isFirstRunFor(search.id);
+  if (firstRun) {
+    console.log(
+      `[${search.id}] first check for this search — recording current ` +
+        'tenders WITHOUT alerting. New tenders alert from the next run.'
+    );
+  }
+  if (error) {
+    await trackHealth(search, false, `scrape error: ${error}`.slice(0, 300));
+    return; // one department's failure never blocks the others
+  }
+  await trackHealth(search, tenders.length > 0, 'scrape succeeded but extracted 0 tenders');
+
+  if (!tenders.length) {
+    console.warn(
+      `[${search.id}] 0 tenders returned. Either there are genuinely no ` +
+        'live tenders for this department right now, or the selectors ' +
+        'need tuning — run `npm run debug` to check screenshots.'
+    );
+    return;
+  }
+
+  let newCount = 0;
+  const currentKeys = new Set(tenders.map((t) => tenderKey(t, search.id)));
+
+  for (const t of tenders) {
+    const key = tenderKey(t, search.id);
+    if (!isNewTender(key)) continue;
+
+    if (firstRun) {
+      markSent(key); // record silently
+      continue;
+    }
+
+    try {
+      if (newCount > 0) await pause(3500); // rate-limit BETWEEN messages only
+      const reReleased = isReReleased(key);
+      const resp = await sendTelegram(formatTenderMessage(t, search.label, reReleased));
+      markSent(key, resp?.result?.message_id ?? null);
+      newCount++;
+    } catch (e) {
+      console.error(`[${search.id}] Telegram send failed: ${e.message}`);
+      // don't markSent — we'll retry this tender next cycle
+    }
+  }
+
+  // Age-out tenders that have left the portal so a same-ID re-release
+  // will alert again. Only runs when the scrape returned real results.
+  const retiredNow = sweepMissing(search.id, currentKeys, tenders.length > 0);
+  markSearchKnown(search.id); // baseline recorded; future runs alert
+
+  // Withdrawn tender → remove its alert from the group (keeps the group
+  // showing only live tenders). Requires bot admin for messages >48h old.
+  if (CONFIG.deleteWithdrawnAlerts) {
+    for (const r of retiredNow) {
+      if (!r.msgId) continue; // alert predates msgId tracking, or silent baseline
+      try {
+        await deleteTelegramMessage(r.msgId);
+        console.log(`[${search.id}] deleted group alert for withdrawn ${r.key}`);
+        await pause(1200);
+      } catch (e) {
+        console.warn(
+          `[${search.id}] could not delete alert for ${r.key}: ${e.message} ` +
+            '(is the bot a group admin with Delete-messages permission?)'
+        );
+      }
+    }
+  }
+
+  console.log(
+    `[${search.id}] done. ${tenders.length} tenders found, ${newCount} new alert(s) sent.`
+  );
+}
+
+// ---- cycle ----
 
 let cycleRunning = false;
 
 async function runOnce() {
-  // Overlap guard: if a cycle is still going when the next tick fires
-  // (slow portal + several searches), skip rather than run two Chromium
-  // sessions at once — fatal on a 1 GB server.
+  // Overlap guard: never run two Chromium sessions at once (fatal on 1 GB).
   if (cycleRunning) {
     console.warn('previous check still running — skipping this tick.');
     return;
@@ -77,95 +163,22 @@ async function runOnce() {
 }
 
 async function runSearches() {
-  // ONE browser + ONE portal session for the whole cycle (fast).
-  let results;
+  const processed = new Set();
   try {
-    results = await scrapeAllSearches(SEARCHES);
+    // STREAMING: alert on each search's tenders as soon as that search
+    // finishes, while the browser continues with the next search.
+    for await (const result of scrapeSearchesStream(SEARCHES)) {
+      processed.add(result.search.id);
+      await processSearchResult(result);
+    }
   } catch (e) {
-    console.error(`cycle failed before any search could run: ${e.message}`);
+    // Browser/session died mid-cycle: mark every UNPROCESSED search failed.
+    console.error(`cycle failed: ${e.message}`);
     for (const search of SEARCHES) {
-      await trackHealth(search, false, `cycle error: ${e.message}`.slice(0, 300));
-    }
-    return;
-  }
-
-  for (const { search, tenders, error } of results) {
-    const firstRun = isFirstRunFor(search.id);
-    if (firstRun) {
-      console.log(
-        `[${search.id}] first check for this search — recording current ` +
-          'tenders WITHOUT alerting. New tenders alert from the next run.'
-      );
-    }
-    if (error) {
-      await trackHealth(search, false, `scrape error: ${error}`.slice(0, 300));
-      continue; // one department's failure never blocks the others
-    }
-    await trackHealth(
-      search,
-      tenders.length > 0,
-      'scrape succeeded but extracted 0 tenders'
-    );
-
-    if (!tenders.length) {
-      console.warn(
-        `[${search.id}] 0 tenders returned. Either there are genuinely no ` +
-          'live tenders for this department right now, or the selectors ' +
-          'need tuning — run `npm run debug` to check screenshots.'
-      );
-      continue;
-    }
-
-    let newCount = 0;
-    const currentKeys = new Set(tenders.map((t) => tenderKey(t, search.id)));
-
-    for (const t of tenders) {
-      const key = tenderKey(t, search.id);
-      if (!isNewTender(key)) continue;
-
-      if (firstRun) {
-        markSent(key); // record silently
-        continue;
-      }
-
-      try {
-        const reReleased = isReReleased(key);
-        const resp = await sendTelegram(formatTenderMessage(t, search.label, reReleased));
-        markSent(key, resp?.result?.message_id ?? null);
-        newCount++;
-        await pause(3500); // stay under Telegram's group rate limit
-      } catch (e) {
-        console.error(`[${search.id}] Telegram send failed: ${e.message}`);
-        // don't markSent — we'll retry this tender next cycle
+      if (!processed.has(search.id)) {
+        await trackHealth(search, false, `cycle error: ${e.message}`.slice(0, 300));
       }
     }
-
-    // Age-out tenders that have left the portal so a same-ID re-release
-    // will alert again. Only runs when the scrape returned real results.
-    const retiredNow = sweepMissing(search.id, currentKeys, tenders.length > 0);
-    markSearchKnown(search.id); // baseline recorded; future runs alert
-
-    // Withdrawn tender → remove its alert from the group (keeps the group
-    // showing only live tenders). Requires bot admin for messages >48h old.
-    if (CONFIG.deleteWithdrawnAlerts) {
-      for (const r of retiredNow) {
-        if (!r.msgId) continue; // alert predates msgId tracking, or silent baseline
-        try {
-          await deleteTelegramMessage(r.msgId);
-          console.log(`[${search.id}] deleted group alert for withdrawn ${r.key}`);
-          await pause(1200);
-        } catch (e) {
-          console.warn(
-            `[${search.id}] could not delete alert for ${r.key}: ${e.message} ` +
-              '(is the bot a group admin with Delete-messages permission?)'
-          );
-        }
-      }
-    }
-
-    console.log(
-      `[${search.id}] done. ${tenders.length} tenders found, ${newCount} new alert(s) sent.`
-    );
   }
 }
 

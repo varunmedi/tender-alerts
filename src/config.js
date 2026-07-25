@@ -31,12 +31,16 @@ export const SEARCHES = [
     label: 'GVMC — E.E. Electrical',
     department: 'Greater Visakhapatnam Municipal Corporation',
     subDepartment: 'E.E.- Electrical',
+    deptId: '49',
+    subDeptId: '74',
   },
   {
     id: 'gvmc-it',
     label: 'GVMC — IT Department',
     department: 'Greater Visakhapatnam Municipal Corporation',
     subDepartment: 'IT Department, GVMC',
+    deptId: '49',
+    subDeptId: '5889',
   },
   {
     // Kept id 'vmrda' so already-alerted EE-VIII tenders are not re-announced.
@@ -46,12 +50,16 @@ export const SEARCHES = [
     label: 'VMRDA — EE-VIII (Electrical)',
     department: 'Visakhapatnam Metropolitan Region Development Authority',
     subDepartment: 'Executive Engineer -VIII (Electrical),VMRDA, Visakhapatnam',
+    deptId: '14',
+    subDeptId: '5520',
   },
   {
     id: 'aptransco-telecom',
     label: 'APTRANSCO — SE Telecom Circle Visakhapatnam',
     department: 'APTRANSCO PRODUCTS',
     subDepartment: 'Superintending Engineer Telecommunication Circle, APTRANSCO Visakhapatnam-P',
+    deptId: '1766',
+    subDeptId: '1781',
   },
 ];
 

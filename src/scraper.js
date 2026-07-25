@@ -480,7 +480,6 @@ async function setFilters(page, search) {
     });
   }
 
-  // Department — its change handler (getCircles) AJAX-loads sub-departments.
   const deptLabel = await selectInSelect(page, '#nDepartmentID', search.department);
   if (!deptLabel) {
     await saveDebug(
@@ -493,8 +492,8 @@ async function setFilters(page, search) {
   }
   console.log(`[${tag}] department set: ${deptLabel}`);
 
-  // Sub-department: wait until getCircles has delivered an option that
-  // matches, then select it. Condition-based — typically <1s.
+  // Sub-department: wait until getCircles has delivered a FRESH list (the
+  // stale marker cleared) containing an option that matches, then select it.
   if (search.subDepartment) {
     const target = norm(search.subDepartment);
     const appeared = await page
@@ -532,7 +531,36 @@ async function setFilters(page, search) {
         `Sub-department "${search.subDepartment}" appeared but could not be selected.`
       );
     }
-    console.log(`[${tag}] sub-department set: ${subLabel}`);
+
+    // Read-only VERIFY: the dropdown's post-selection value must match the
+    // option we chose (belt) — the POST-body guard in applyAndParse is the
+    // braces. Both are passive checks that cannot disturb the session.
+    const verified = await page
+      .evaluate(
+        (wantLabel) => {
+          const el = document.querySelector('#subDeptId');
+          if (!el) return { ok: false, got: null };
+          const sel = el.options[el.selectedIndex];
+          const normJs = (s) => s.toLowerCase().replace(/\s+/g, '');
+          return {
+            ok: sel ? normJs(sel.textContent.trim()) === normJs(wantLabel) : false,
+            got: sel ? sel.textContent.trim() : null,
+            value: el.value,
+          };
+        },
+        subLabel
+      )
+      .catch(() => ({ ok: false, got: null }));
+
+    if (!verified.ok) {
+      throw scrapeError(
+        `sub-department selection did not stick for "${search.subDepartment}" — ` +
+          `dropdown shows "${verified.got}" (value ${verified.value}). ` +
+          `Likely a late getCircles() reset; retrying with a fresh session.`,
+        true
+      );
+    }
+    console.log(`[${tag}] sub-department set: ${subLabel} (value ${verified.value})`);
   }
   await screenshot(page, `${tag}-02-filters-set`);
 }
@@ -562,14 +590,39 @@ async function applyAndParse(page, search, postCaptures) {
   // Persist the POST body for diagnostics (same artifact as before).
   const body = postCaptures.slice(before).pop() || '(no POST captured)';
   await saveDebug(`${tag}-post-auto.txt`, body);
+  let params;
   try {
-    const params = new URLSearchParams(body);
+    params = new URLSearchParams(body);
     const brief = ['nDepartmentID', 'subDeptId', 'hdnSearch', 'hdnSearch4', 'hdnadvsearch', 'hdnnoSearch']
       .map((k) => `${k}=${params.get(k)}`)
       .join(' | ');
     console.log(`[${tag}] POST (auto): ${brief}`);
   } catch {
-    /* non-fatal */
+    params = null;
+  }
+
+  // GROUND-TRUTH GUARD: the POST body is what the portal actually filtered
+  // on — trust it over any dropdown label we logged earlier. If config
+  // declares the expected IDs, assert the POST used them; fail closed on any
+  // mismatch so we never ingest (and alert) the wrong sub-department's
+  // tenders. This is the definitive fix for the subDeptId=74/5889 leak.
+  if (params) {
+    const gotDept = params.get('nDepartmentID');
+    const gotSub = params.get('subDeptId');
+    if (search.deptId && gotDept !== search.deptId) {
+      throw scrapeError(
+        `POST department mismatch for "${search.id}": expected nDepartmentID=${search.deptId}, ` +
+          `got ${gotDept}. Refusing results (wrong department).`,
+        true
+      );
+    }
+    if (search.subDeptId && gotSub !== search.subDeptId) {
+      throw scrapeError(
+        `POST sub-department mismatch for "${search.id}": expected subDeptId=${search.subDeptId}, ` +
+          `got ${gotSub}. Refusing results (stale dropdown state — wrong sub-department).`,
+        true
+      );
+    }
   }
 
   // Wait for EITHER terminal state: valid tender rows OR an explicit
@@ -614,67 +667,70 @@ export async function* scrapeSearchesStream(searches) {
       ...(CONFIG.headed ? ['--start-maximized'] : []),
     ],
   });
-  const context = await browser.newContext({
-    userAgent:
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-      '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-    ...(CONFIG.headed ? { viewport: null } : { viewport: { width: 1920, height: 1080 } }),
-    locale: 'en-IN',
-    timezoneId: 'Asia/Kolkata',
-  });
-  await context.addInitScript(() => {
-    Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    Object.defineProperty(navigator, 'languages', { get: () => ['en-IN', 'en'] });
-  });
+  // Each search runs in its OWN fresh context (isolated cookies, session, and
+  // anti-tamper tokens). A shared context re-navigated per search caused the
+  // portal to invalidate its own session tokens → "Apply bounced to
+  // SessionTimeOut". Per-context isolation also fully eliminates the stale
+  // #subDeptId leak between same-department searches (the subDeptId=74/5889
+  // bug) — every search starts from a clean slate.
+  const newSearchContext = async () => {
+    const context = await browser.newContext({
+      userAgent:
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+        '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+      ...(CONFIG.headed ? { viewport: null } : { viewport: { width: 1920, height: 1080 } }),
+      locale: 'en-IN',
+      timezoneId: 'Asia/Kolkata',
+    });
+    await context.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+      Object.defineProperty(navigator, 'languages', { get: () => ['en-IN', 'en'] });
+    });
+    await context.route('**/*', (route) => {
+      const type = route.request().resourceType();
+      if (type === 'image' || type === 'media' || type === 'font') return route.abort();
+      return route.continue();
+    });
+    return context;
+  };
 
-  // Block resources the scraper never needs — big speed/RAM win.
-  await context.route('**/*', (route) => {
-    const type = route.request().resourceType();
-    if (type === 'image' || type === 'media' || type === 'font') {
-      return route.abort();
-    }
-    return route.continue();
-  });
-
-  const postCaptures = [];
-  context.on('request', (req) => {
-    try {
-      if (req.method() === 'POST' && req.url().includes('TenderDetailsHome.html')) {
-        postCaptures.push(req.postData() || '');
+  const attemptSearch = async (search, postCaptures) => {
+    const context = await newSearchContext();
+    context.on('request', (req) => {
+      try {
+        if (req.method() === 'POST' && req.url().includes('TenderDetailsHome.html')) {
+          postCaptures.push(req.postData() || '');
+        }
+      } catch {
+        /* ignore */
       }
-    } catch {
-      /* ignore */
+    });
+    const page = await context.newPage();
+    page.setDefaultTimeout(CONFIG.actionTimeout);
+    try {
+      await ensureTenderDetails(page, search.id, false); // fresh context: no force needed
+      await setFilters(page, search);
+      return await applyAndParse(page, search, postCaptures);
+    } finally {
+      await context.close().catch(() => {});
     }
-  });
-
-  const page = await context.newPage();
-  page.setDefaultTimeout(CONFIG.actionTimeout);
-
-  let forceFresh = false;
-
-  const attemptSearch = async (search, fresh) => {
-    await ensureTenderDetails(page, search.id, fresh);
-    await setFilters(page, search);
-    return applyAndParse(page, search, postCaptures);
   };
 
   for (const search of searches) {
     const started = Date.now();
     let result;
     try {
+      const postCaptures = []; // per-search: no cross-talk between searches
       let outcome;
       try {
-        outcome = await attemptSearch(search, forceFresh);
-        forceFresh = false;
+        outcome = await attemptSearch(search, postCaptures);
       } catch (e) {
-        // ONE same-cycle retry with a fresh session — but only for
-        // transient failures (timeouts, navigation, pagination). Config/
-        // schema errors (dept not found, ambiguous, headers changed) are
-        // not transient and must surface immediately.
+        // ONE same-cycle retry in a brand-new context — transient only.
+        // Config/schema errors (dept not found, ambiguous, headers,
+        // POST-mismatch) are surfaced immediately, never retried blindly.
         if (!e.transient) throw e;
-        console.warn(`[${search.id}] transient failure (${e.message}) — retrying with fresh session…`);
-        outcome = await attemptSearch(search, true);
-        forceFresh = false;
+        console.warn(`[${search.id}] transient failure (${e.message}) — retrying with fresh context…`);
+        outcome = await attemptSearch(search, []);
       }
       const { status, tenders } = outcome;
       console.log(
@@ -683,7 +739,6 @@ export async function* scrapeSearchesStream(searches) {
       result = { search, status, tenders, error: null };
     } catch (e) {
       console.error(`[${search.id}] scrape failed: ${e.message}`);
-      forceFresh = true;
       result = { search, status: 'error', tenders: [], error: e.message };
     }
     yield result; // each result is processed before the next search starts

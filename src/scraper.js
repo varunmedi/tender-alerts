@@ -129,6 +129,7 @@ async function waitForTenderTable(page, timeoutMs = 20000) {
         }
         return false;
       },
+      undefined, // arg slot — options must be the THIRD parameter
       { timeout: timeoutMs }
     );
     return await handle.jsonValue();
@@ -148,12 +149,30 @@ async function waitForResults(page, timeoutMs = 15000) {
   return [];
 }
 
-async function collectAllPages(page, maxPages = 10) {
-  let all = await waitForResults(page);
-  if (!all.length) return all;
+async function collectAllPages(page, maxPages = 50) {
+  const all = [];
+  const seen = new Set();
 
-  for (let p = 2; p <= maxPages; p++) {
-    const firstId = all[all.length - 1]?.tenderId;
+  for (let pageNumber = 1; pageNumber <= maxPages; pageNumber++) {
+    const current = await parseResultsTable(page);
+    for (const t of current) {
+      if (!seen.has(t.tenderId)) {
+        seen.add(t.tenderId);
+        all.push(t);
+      }
+    }
+
+    // Capture the CURRENT page's first-row ID *before* clicking Next, and
+    // wait until the first row differs from THAT — comparing against the
+    // previous page's LAST row (the old bug) resolves instantly and made
+    // pagination stop after page 1.
+    const previousFirstId = await page
+      .evaluate(() => {
+        const td = document.querySelector('#pagetable13 tbody tr td:nth-child(2)');
+        return td ? td.textContent.trim() : null;
+      })
+      .catch(() => null);
+
     const advanced = await page
       .evaluate(() => {
         const next = document.querySelector('#pagetable13_next');
@@ -162,27 +181,23 @@ async function collectAllPages(page, maxPages = 10) {
         return true;
       })
       .catch(() => false);
-    if (!advanced) break;
+    if (!advanced) return all;
 
-    // DataTables repaints client-side — wait for the first row to change.
     await page
       .waitForFunction(
         (prev) => {
-          const td = document.querySelector(
-            '#pagetable13 tbody tr td:nth-child(2)'
-          );
+          const td = document.querySelector('#pagetable13 tbody tr td:nth-child(2)');
           return td && td.textContent.trim() !== prev;
         },
-        firstId,
+        previousFirstId,
         { timeout: 5000 }
       )
       .catch(() => {});
-
-    const more = await parseResultsTable(page);
-    if (!more.length) break;
-    if (more[0] && all.some((t) => t.tenderId === more[0].tenderId)) break;
-    all = all.concat(more);
   }
+
+  console.warn(
+    `pagination reached the ${maxPages}-page safety cap — results may be truncated.`
+  );
   return all;
 }
 
@@ -238,6 +253,7 @@ async function ensureTenderDetails(page, tag, force = false) {
         (document.loginForm || document.getElementById('loginForm')) &&
         typeof window.temp === 'function' &&
         typeof window.tempName !== 'undefined',
+      undefined, // arg slot — options must be the THIRD parameter
       { timeout: 30000 }
     )
     .catch(() => {
@@ -458,16 +474,19 @@ async function applyAndParse(page, search, postCaptures) {
   await screenshot(page, `${tag}-03-results`);
 
   if (state === 'empty') {
+    // Portal is HEALTHY and explicitly reports zero tenders — distinct from
+    // a timeout, which is an unhealthy scrape and must not baseline/sweep.
     console.log(`[${tag}] portal reports no matching records (0 tenders).`);
-    return [];
+    return { status: 'empty', tenders: [] };
   }
   if (state === 'timeout') {
-    console.warn(`[${tag}] results table reached neither rows nor an empty marker in 20s.`);
-    return [];
+    // Neither rows nor an explicit empty marker: treat as a FAILED scrape so
+    // the caller re-establishes the session and health tracking fires.
+    throw new Error('results table reached neither rows nor an empty marker in 20s');
   }
   const tenders = await collectAllPages(page);
   console.log(`[${tag}] extracted ${tenders.length} tenders from results table`);
-  return tenders;
+  return { status: 'ok', tenders };
 }
 
 // ------------------------- public API -------------------------
@@ -479,18 +498,20 @@ async function applyAndParse(page, search, postCaptures) {
  * never blocks the others.
  */
 export async function* scrapeSearchesStream(searches) {
+  // --debug  = save extra artifacts, stays HEADLESS (works on the server)
+  // --headed = open a visible browser (needs a desktop; use on the laptop)
   const browser = await chromium.launch({
-    headless: !CONFIG.debug,
+    headless: !CONFIG.headed,
     args: [
       '--disable-blink-features=AutomationControlled',
-      ...(CONFIG.debug ? ['--start-maximized'] : []),
+      ...(CONFIG.headed ? ['--start-maximized'] : []),
     ],
   });
   const context = await browser.newContext({
     userAgent:
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
       '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-    ...(CONFIG.debug ? { viewport: null } : { viewport: { width: 1920, height: 1080 } }),
+    ...(CONFIG.headed ? { viewport: null } : { viewport: { width: 1920, height: 1080 } }),
     locale: 'en-IN',
     timezoneId: 'Asia/Kolkata',
   });
@@ -532,15 +553,15 @@ export async function* scrapeSearchesStream(searches) {
         await ensureTenderDetails(page, search.id, forceFresh);
         forceFresh = false;
         await setFilters(page, search);
-        const tenders = await applyAndParse(page, search, postCaptures);
+        const { status, tenders } = await applyAndParse(page, search, postCaptures);
         console.log(
           `[${search.id}] search completed in ${((Date.now() - started) / 1000).toFixed(1)}s`
         );
-        result = { search, tenders, error: null };
+        result = { search, status, tenders, error: null };
       } catch (e) {
         console.error(`[${search.id}] scrape failed: ${e.message}`);
         forceFresh = true; // next search re-establishes the session from scratch
-        result = { search, tenders: [], error: e.message };
+        result = { search, status: 'error', tenders: [], error: e.message };
       }
       yield result; // caller alerts on this while we move to the next search
     }

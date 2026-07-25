@@ -1,14 +1,58 @@
 import { CONFIG, assertConfig } from './config.js';
 
 /**
- * Sends messages to your Telegram group via the official Bot API.
- * Free, unlimited for this use case, no library needed — plain HTTPS.
+ * Telegram notifier.
+ * All API calls have a 15s timeout (AbortSignal.timeout) and up to 2 retries
+ * for network failures, HTTP 5xx, and 429 (honouring retry_after) — a stalled
+ * Telegram connection must never block the scraping pipeline.
  */
 
-const API = () =>
-  `https://api.telegram.org/bot${CONFIG.telegramBotToken}/sendMessage`;
+const API_BASE = () => `https://api.telegram.org/bot${CONFIG.telegramBotToken}`;
 
-/** Escape the characters Telegram's HTML parse mode cares about. */
+export const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function tgCall(method, payload, { retries = 2 } = {}) {
+  let lastError;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(`${API_BASE()}/${method}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: AbortSignal.timeout(15_000),
+        body: JSON.stringify(payload),
+      });
+      const body = await res.json().catch(() => null);
+
+      if (body?.ok) return body;
+
+      // 429: respect Telegram's requested wait, then retry
+      if (res.status === 429 && attempt < retries) {
+        const wait = (body?.parameters?.retry_after ?? 3) * 1000;
+        await pause(wait);
+        continue;
+      }
+      // 5xx: transient server error — brief backoff, retry
+      if (res.status >= 500 && attempt < retries) {
+        await pause(1500 * (attempt + 1));
+        continue;
+      }
+      // 4xx (other than 429): permanent — do not retry
+      throw new Error(`${method} failed: ${JSON.stringify(body ?? { status: res.status })}`);
+    } catch (e) {
+      lastError = e;
+      const transient =
+        e.name === 'TimeoutError' || e.name === 'AbortError' ||
+        e.code === 'ECONNRESET' || e.message?.includes('fetch failed');
+      if (transient && attempt < retries) {
+        await pause(1500 * (attempt + 1));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastError;
+}
+
 function esc(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;')
@@ -16,15 +60,13 @@ function esc(s) {
     .replace(/>/g, '&gt;');
 }
 
+// ---------------- message formats ----------------
+
 export function formatTenderMessage(t, searchLabel, reReleased = false) {
   const heading = reReleased
     ? `🔁 <b>Re-released Tender — ${esc(searchLabel)}</b>`
     : `🔔 <b>New Tender — ${esc(searchLabel)}</b>`;
-  const lines = [
-    heading,
-    '',
-    `<b>${esc(t.title)}</b>`,
-  ];
+  const lines = [heading, '', `<b>${esc(t.title)}</b>`];
   if (t.tenderId) lines.push(`🆔 Tender ID: <code>${esc(t.tenderId)}</code>`);
   if (t.noticeNumber) lines.push(`📄 Notice No: ${esc(t.noticeNumber)}`);
   if (t.category) lines.push(`🏷 Category: ${esc(t.category)}`);
@@ -37,58 +79,63 @@ export function formatTenderMessage(t, searchLabel, reReleased = false) {
   return lines.join('\n');
 }
 
-export async function sendTelegram(text) {
-  const res = await fetch(API(), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: CONFIG.telegramChatId,
-      text,
-      parse_mode: 'HTML',
-      disable_web_page_preview: true,
-    }),
-  });
-  const body = await res.json();
-  if (!body.ok) {
-    throw new Error(`Telegram API error: ${JSON.stringify(body)}`);
+/** Amendment notification (same tender ID, changed details). */
+export function formatUpdateMessage(t, searchLabel, changes) {
+  const lines = [
+    `📝 <b>Tender Updated — ${esc(searchLabel)}</b>`,
+    '',
+    `<b>${esc(t.title)}</b>`,
+    `🆔 Tender ID: <code>${esc(t.tenderId)}</code>`,
+  ];
+  for (const c of changes) {
+    lines.push(`• ${esc(c.field)}: <s>${esc(c.from ?? '—')}</s> → <b>${esc(c.to ?? '—')}</b>`);
   }
-  return body;
+  lines.push('', `🔗 https://tender.apeprocurement.gov.in/TenderDetailsHome.html`);
+  return lines.join('\n');
 }
 
-/** Delete a previously sent alert (used when a tender is withdrawn). */
-export async function deleteTelegramMessage(messageId) {
-  const res = await fetch(
-    `https://api.telegram.org/bot${CONFIG.telegramBotToken}/deleteMessage`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        chat_id: CONFIG.telegramChatId,
-        message_id: messageId,
-      }),
-    }
+/** Tombstone text for withdrawn alerts too old to delete. */
+export function formatWithdrawnTombstone(tenderId, searchLabel) {
+  return (
+    `❌ <b>Withdrawn / Closed Tender — ${esc(searchLabel)}</b>\n\n` +
+    `🆔 Tender ID: <code>${esc(tenderId)}</code>\n` +
+    `This tender is no longer listed by the department.`
   );
-  const body = await res.json();
-  if (!body.ok) {
-    // Common causes: message older than 48h and bot is not a group admin,
-    // or the message was already deleted manually.
-    throw new Error(`deleteMessage failed: ${JSON.stringify(body)}`);
-  }
-  return body;
 }
 
-/** Small delay helper so we respect Telegram's ~20 msg/min group limit. */
-export const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+// ---------------- API operations ----------------
+
+export async function sendTelegram(text) {
+  return tgCall('sendMessage', {
+    chat_id: CONFIG.telegramChatId,
+    text,
+    parse_mode: 'HTML',
+    disable_web_page_preview: true,
+  });
+}
+
+export async function deleteTelegramMessage(messageId) {
+  return tgCall('deleteMessage', {
+    chat_id: CONFIG.telegramChatId,
+    message_id: messageId,
+  }, { retries: 1 });
+}
+
+export async function editTelegramMessage(messageId, text) {
+  return tgCall('editMessageText', {
+    chat_id: CONFIG.telegramChatId,
+    message_id: messageId,
+    text,
+    parse_mode: 'HTML',
+    disable_web_page_preview: true,
+  }, { retries: 1 });
+}
 
 // ---- CLI test mode: `npm run test-telegram` ----
 if (process.argv.includes('--test')) {
   assertConfig();
-  sendTelegram(
-    '✅ <b>AP Tender Alerts</b> is connected to this group. Test successful!'
-  )
-    .then(() => {
-      console.log('Test message sent successfully. Check your group!');
-    })
+  sendTelegram('✅ <b>AP Tender Alerts</b> is connected to this group. Test successful!')
+    .then(() => console.log('Test message sent successfully. Check your group!'))
     .catch((e) => {
       console.error('Failed:', e.message);
       process.exit(1);

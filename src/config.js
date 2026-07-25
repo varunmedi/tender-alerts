@@ -62,7 +62,10 @@ export const CONFIG = {
   adaptiveSchedule: process.env.ADAPTIVE_SCHEDULE !== '0',
   pollIntervalMinutes: parseInt(process.env.POLL_INTERVAL_MINUTES || '45', 10),
   // --debug flag works on Windows/Mac/Linux; env var kept for compatibility
-  debug: process.env.DEBUG_SCRAPER === '1' || process.argv.includes('--debug'),
+  // --debug: extra artifacts (screenshots/dumps), still headless — server-safe.
+  // --headed: visible browser window — laptop/desktop only.
+  debug: process.env.DEBUG_SCRAPER === '1' || process.argv.includes('--debug') || process.argv.includes('--headed'),
+  headed: process.argv.includes('--headed'),
   // When a tender is withdrawn from the portal (retired after 3 missed
   // checks), delete its alert message from the Telegram group so the group
   // only shows live tenders. Set DELETE_WITHDRAWN_ALERTS=0 in .env to keep
@@ -77,14 +80,44 @@ export const CONFIG = {
 };
 
 export function assertConfig() {
-  const missing = [];
-  if (!CONFIG.telegramBotToken) missing.push('TELEGRAM_BOT_TOKEN');
-  if (!CONFIG.telegramChatId) missing.push('TELEGRAM_CHAT_ID');
-  if (missing.length) {
-    console.error(
-      `Missing required env vars: ${missing.join(', ')}.\n` +
-        'Copy .env.example to .env and fill them in.'
-    );
+  const errors = [];
+  if (!CONFIG.telegramBotToken) errors.push('TELEGRAM_BOT_TOKEN is missing');
+  if (!CONFIG.telegramChatId) errors.push('TELEGRAM_CHAT_ID is missing');
+  else if (!/^-?\d+$/.test(String(CONFIG.telegramChatId))) {
+    errors.push(`TELEGRAM_CHAT_ID "${CONFIG.telegramChatId}" is not a numeric chat id`);
+  }
+
+  // Numeric env values: a typo producing NaN would make setTimeout(NaN)
+  // fire immediately → rapid polling loop. Validate hard.
+  const nums = {
+    activeStartHour: [CONFIG.activeStartHour, 0, 23],
+    activeEndHour: [CONFIG.activeEndHour, 1, 24],
+    activeIntervalMin: [CONFIG.activeIntervalMin, 10, 1440],
+    quietIntervalMin: [CONFIG.quietIntervalMin, 10, 1440],
+    pollIntervalMinutes: [CONFIG.pollIntervalMinutes, 10, 1440],
+  };
+  for (const [name, [val, min, max]] of Object.entries(nums)) {
+    if (!Number.isInteger(val) || val < min || val > max) {
+      errors.push(`${name}=${val} is invalid (expected integer ${min}–${max})`);
+    }
+  }
+  if (Number.isInteger(CONFIG.activeStartHour) && Number.isInteger(CONFIG.activeEndHour) &&
+      CONFIG.activeStartHour >= CONFIG.activeEndHour) {
+    errors.push('ACTIVE_START_HOUR must be earlier than ACTIVE_END_HOUR');
+  }
+
+  // Searches: unique ids, required fields
+  const ids = new Set();
+  for (const s of SEARCHES) {
+    if (!s.id || !s.label || !s.department) {
+      errors.push(`search entry ${JSON.stringify(s.id)} is missing id/label/department`);
+    }
+    if (ids.has(s.id)) errors.push(`duplicate search id "${s.id}"`);
+    ids.add(s.id);
+  }
+
+  if (errors.length) {
+    console.error('Configuration errors:\n  - ' + errors.join('\n  - '));
     process.exit(1);
   }
 }

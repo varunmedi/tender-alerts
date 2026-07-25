@@ -3,29 +3,32 @@ import path from 'path';
 import { CONFIG } from './config.js';
 
 /**
- * Dedup store v2.
+ * Dedup + lifecycle store v3.
  *
- * Structure (data/seen.json):
  * {
- *   "version": 2,
- *   "tenders": { "<searchId>::<tenderId>": { "lastSeen": iso, "missing": 0 } },
- *   "retired": { "<searchId>::<tenderId>": iso-when-retired }
+ *   "version": 3,
+ *   "tenders": { "<searchId>::<tenderId>": {
+ *       lastSeen, missing, msgId, sentAt, fp   // fp = amendment fingerprint
+ *   }},
+ *   "retired": { "<key>": {
+ *       retiredAt, msgId, sentAt,
+ *       notify: "pending" | "done",            // withdrawn-alert cleanup state
+ *       attempts: 0
+ *   }},
+ *   "searches": ["gvmc-electrical", ...]       // searches already baselined
  * }
  *
- * Lifecycle:
- *  - New tender        → alert → recorded in `tenders`
- *  - Present each run  → missing counter stays 0
- *  - Absent from a SUCCESSFUL scrape → missing++ ; at 3 consecutive
- *    absences the entry moves to `retired` (tender withdrawn/closed)
- *  - Reappears while retired → treated as NEW again → alert fires with a
- *    "re-released" label, entry returns to `tenders`
- *  - Retired entries are pruned after 365 days to keep the file small
- *
- * v1 files (plain array of keys) are migrated automatically.
+ * Corruption handling: a missing file (ENOENT) starts fresh silently; any
+ * OTHER load failure backs the bad file up as seen.json.corrupt-<ts>, starts
+ * fresh, and exposes `storeLoadWarning` so the orchestrator can notify the
+ * group ONCE (silent resets can suppress genuine alerts).
  */
 
-const MISSING_LIMIT = 3;      // consecutive successful scrapes without the tender
+const MISSING_LIMIT = 3;
 const RETIRED_KEEP_DAYS = 365;
+const NOTIFY_MAX_ATTEMPTS = 5;
+
+export let storeLoadWarning = null;
 
 function searchIdsFromKeys(tenders) {
   const ids = new Set();
@@ -37,33 +40,54 @@ function searchIdsFromKeys(tenders) {
 }
 
 function migrate(raw) {
+  if (raw == null) return { version: 3, tenders: {}, retired: {}, searches: [] };
+
+  // v1: flat array of keys
   if (Array.isArray(raw)) {
     const tenders = {};
     const now = new Date().toISOString();
     for (const key of raw) tenders[key] = { lastSeen: now, missing: 0 };
-    return { version: 2, tenders, retired: {}, searches: searchIdsFromKeys(tenders) };
+    return { version: 3, tenders, retired: {}, searches: searchIdsFromKeys(tenders) };
   }
-  if (raw && raw.version === 2) {
-    raw.tenders = raw.tenders || {};
-    raw.retired = raw.retired || {};
-    // derive the known-searches list for stores written before this field existed
-    raw.searches = raw.searches || searchIdsFromKeys(raw.tenders);
-    return raw;
+
+  const out = {
+    version: 3,
+    tenders: raw.tenders || {},
+    retired: {},
+    searches: raw.searches || searchIdsFromKeys(raw.tenders || {}),
+  };
+  // v2 retired entries were plain ISO strings; v3 are objects
+  for (const [key, val] of Object.entries(raw.retired || {})) {
+    out.retired[key] =
+      typeof val === 'string'
+        ? { retiredAt: val, msgId: null, sentAt: null, notify: 'done', attempts: 0 }
+        : { attempts: 0, notify: 'done', ...val };
   }
-  return { version: 2, tenders: {}, retired: {}, searches: [] };
+  return out;
 }
 
 function load() {
   try {
     return migrate(JSON.parse(fs.readFileSync(CONFIG.seenStorePath, 'utf8')));
-  } catch {
-    return migrate(null); // fresh store with all fields initialized
+  } catch (error) {
+    if (error.code === 'ENOENT') return migrate(null);
+    // Corrupt or unreadable: preserve evidence, start fresh, surface warning.
+    try {
+      const backup = `${CONFIG.seenStorePath}.corrupt-${Date.now()}`;
+      fs.copyFileSync(CONFIG.seenStorePath, backup);
+      storeLoadWarning =
+        `State file was corrupt/unreadable (${error.message}). ` +
+        `Backed up to ${path.basename(backup)} and started fresh — all searches ` +
+        `will silently re-baseline this cycle (a few alerts may be missed once).`;
+    } catch {
+      storeLoadWarning = `State file unreadable (${error.message}); started fresh.`;
+    }
+    console.error(`[store] ${storeLoadWarning}`);
+    return migrate(null);
   }
 }
 
 function save() {
-  // Atomic write: write to a temp file, then rename. A crash or power
-  // loss mid-write can then never leave a half-written seen.json.
   fs.mkdirSync(path.dirname(CONFIG.seenStorePath), { recursive: true });
   const tmp = CONFIG.seenStorePath + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(store, null, 2), 'utf8');
@@ -72,39 +96,52 @@ function save() {
 
 const store = load();
 
-/** True if this tender should trigger an alert (never seen, or retired). */
+// ---------------- alert dedup ----------------
+
 export function isNewTender(key) {
   return !(key in store.tenders);
 }
 
-/** True if this "new" tender is actually a re-release of a retired one. */
 export function isReReleased(key) {
   return key in store.retired;
 }
 
-/**
- * Record a tender as alerted (or silently recorded on first run).
- * msgId is the Telegram message_id of the alert, kept so the alert can be
- * deleted from the group if the tender is later withdrawn from the portal.
- */
-export function markSent(key, msgId = null) {
+export function markSent(key, msgId = null, fp = null) {
   delete store.retired[key];
   store.tenders[key] = {
     lastSeen: new Date().toISOString(),
     missing: 0,
-    ...(msgId ? { msgId } : {}),
+    ...(msgId ? { msgId, sentAt: new Date().toISOString() } : {}),
+    ...(fp ? { fp } : {}),
   };
   save();
 }
 
+// ---------------- amendment detection ----------------
+
+/** Returns previous fingerprint for a KNOWN tender, or undefined. */
+export function getFingerprint(key) {
+  return store.tenders[key]?.fp;
+}
+
+/** Update a known tender's fingerprint (call after alerting the update). */
+export function setFingerprint(key, fp) {
+  const meta = store.tenders[key];
+  if (!meta) return;
+  meta.fp = fp;
+  save();
+}
+
+// ---------------- retirement / withdrawal ----------------
+
 /**
- * Call ONCE per search after a scrape, with the set of keys currently on
- * the portal. Only acts when the scrape succeeded (scrapeOk) — a failed
- * or empty scrape must never age-out entries, or one bad run would cause
- * a re-alert flood later.
+ * Call once per search after a HEALTHY scrape ('ok' or explicit 'empty')
+ * with the set of keys currently on the portal. Never call for timeouts or
+ * errors — those must not age anything.
+ * Returns the entries retired THIS run.
  */
 export function sweepMissing(searchId, currentKeys, scrapeOk) {
-  const retiredNow = []; // [{ key, msgId }] — returned so alerts can be deleted
+  const retiredNow = [];
   if (!scrapeOk) return retiredNow;
   const now = new Date().toISOString();
   const prefix = `${searchId}::`;
@@ -120,9 +157,16 @@ export function sweepMissing(searchId, currentKeys, scrapeOk) {
       meta.missing = (meta.missing || 0) + 1;
       changed = true;
       if (meta.missing >= MISSING_LIMIT) {
-        retiredNow.push({ key, msgId: meta.msgId || null });
+        const entry = {
+          retiredAt: now,
+          msgId: meta.msgId || null,
+          sentAt: meta.sentAt || null,
+          notify: meta.msgId ? 'pending' : 'done',
+          attempts: 0,
+        };
         delete store.tenders[key];
-        store.retired[key] = now;
+        store.retired[key] = entry;
+        retiredNow.push({ key, ...entry });
         console.log(
           `[store] retired ${key} (absent from ${MISSING_LIMIT} consecutive scrapes) — ` +
             'a future reappearance with this ID WILL alert again.'
@@ -131,10 +175,9 @@ export function sweepMissing(searchId, currentKeys, scrapeOk) {
     }
   }
 
-  // prune ancient retired entries
   const cutoff = Date.now() - RETIRED_KEEP_DAYS * 24 * 3600 * 1000;
-  for (const [key, when] of Object.entries(store.retired)) {
-    if (new Date(when).getTime() < cutoff) {
+  for (const [key, entry] of Object.entries(store.retired)) {
+    if (new Date(entry.retiredAt).getTime() < cutoff) {
       delete store.retired[key];
       changed = true;
     }
@@ -144,17 +187,38 @@ export function sweepMissing(searchId, currentKeys, scrapeOk) {
   return retiredNow;
 }
 
-/**
- * Per-search first run: true until a search has completed one successful
- * scrape. New searches added to config record their existing tenders
- * SILENTLY on their first check — no alert flood — even when other
- * searches have been running for months.
- */
+/** Withdrawn alerts whose group cleanup (delete/edit) hasn't succeeded yet. */
+export function getPendingRetirements(searchId) {
+  const prefix = `${searchId}::`;
+  return Object.entries(store.retired)
+    .filter(([key, e]) => key.startsWith(prefix) && e.notify === 'pending' && e.msgId)
+    .map(([key, e]) => ({ key, ...e }));
+}
+
+/** Record a cleanup attempt outcome; gives up after NOTIFY_MAX_ATTEMPTS. */
+export function markRetirementNotified(key, success) {
+  const entry = store.retired[key];
+  if (!entry) return;
+  if (success) {
+    entry.notify = 'done';
+  } else {
+    entry.attempts = (entry.attempts || 0) + 1;
+    if (entry.attempts >= NOTIFY_MAX_ATTEMPTS) {
+      entry.notify = 'done';
+      console.warn(
+        `[store] giving up on group cleanup for ${key} after ${NOTIFY_MAX_ATTEMPTS} attempts.`
+      );
+    }
+  }
+  save();
+}
+
+// ---------------- per-search baselines ----------------
+
 export function isFirstRunFor(searchId) {
   return !store.searches.includes(searchId);
 }
 
-/** Call after a search's first successful scrape has been processed. */
 export function markSearchKnown(searchId) {
   if (!store.searches.includes(searchId)) {
     store.searches.push(searchId);

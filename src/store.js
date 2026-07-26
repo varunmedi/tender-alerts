@@ -24,6 +24,7 @@ import { CONFIG } from './config.js';
  * group ONCE (silent resets can suppress genuine alerts).
  */
 
+const STORE_VERSION = 4;
 const MISSING_LIMIT = 3;
 const RETIRED_KEEP_DAYS = 365;
 const NOTIFY_MAX_ATTEMPTS = 5;
@@ -40,18 +41,25 @@ function searchIdsFromKeys(tenders) {
 }
 
 function migrate(raw) {
-  if (raw == null) return { version: 3, tenders: {}, retired: {}, searches: [] };
+  if (raw == null) return { version: STORE_VERSION, tenders: {}, retired: {}, searches: [] };
+  // Refuse FUTURE versions: an older deployment must never rewrite a newer
+  // state file and silently drop fields it doesn't understand.
+  if (Number.isInteger(raw.version) && raw.version > STORE_VERSION) {
+    throw new Error(
+      `state version ${raw.version} is newer than supported ${STORE_VERSION} — refusing to load`
+    );
+  }
 
   // v1: flat array of keys
   if (Array.isArray(raw)) {
     const tenders = {};
     const now = new Date().toISOString();
     for (const key of raw) tenders[key] = { lastSeen: now, missing: 0 };
-    return { version: 3, tenders, retired: {}, searches: searchIdsFromKeys(tenders) };
+    return { version: STORE_VERSION, tenders, retired: {}, searches: searchIdsFromKeys(tenders) };
   }
 
   const out = {
-    version: 3,
+    version: STORE_VERSION,
     tenders: raw.tenders || {},
     retired: {},
     searches: raw.searches || searchIdsFromKeys(raw.tenders || {}),

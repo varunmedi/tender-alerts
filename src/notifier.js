@@ -77,7 +77,7 @@ async function tgCall(method, payload, { retries = 2 } = {}) {
 
 // ---------------- formatting ----------------
 
-function esc(s) {
+export function esc(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -90,9 +90,13 @@ export function truncate(value, max = 500) {
 }
 
 export function clampMessage(text) {
-  return text.length <= SAFE_LIMIT
-    ? text
-    : `${text.slice(0, SAFE_LIMIT - 30)}\n\n…message truncated`;
+  if (text.length <= SAFE_LIMIT) return text;
+  // Emergency fallback only (formatters already truncate fields, so this is
+  // near-unreachable). Arbitrary slicing could cut through <b>…</b> or an
+  // &entity; and make Telegram reject the send — so strip ALL tags first,
+  // slice the plain text, and re-escape. Ugly but always deliverable.
+  const plain = text.replace(/<[^>]*>/g, '');
+  return esc(plain.slice(0, SAFE_LIMIT - 30)) + '\n\n…message truncated';
 }
 
 export function formatTenderMessage(t, searchLabel, reReleased = false, updatedNote = null) {
@@ -120,11 +124,15 @@ export function formatUpdateMessage(t, searchLabel, changes) {
     `<b>${esc(truncate(t.title, 400))}</b>`,
     `🆔 Tender ID: <code>${esc(t.tenderId)}</code>`,
   ];
-  for (const c of changes) {
+  const shown = changes.slice(0, 6); // bounded: worst case stays under the limit
+  for (const c of shown) {
     lines.push(
-      `• ${esc(c.field)}: <s>${esc(truncate(c.from ?? '—', 300))}</s> → ` +
-        `<b>${esc(truncate(c.to ?? '—', 300))}</b>`
+      `• ${esc(c.field)}: <s>${esc(truncate(c.from ?? '—', 200))}</s> → ` +
+        `<b>${esc(truncate(c.to ?? '—', 200))}</b>`
     );
+  }
+  if (changes.length > shown.length) {
+    lines.push(`• …and ${changes.length - shown.length} more change(s)`);
   }
   lines.push('', `🔗 https://tender.apeprocurement.gov.in/TenderDetailsHome.html`);
   return clampMessage(lines.join('\n'));

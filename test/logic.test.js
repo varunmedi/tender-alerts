@@ -48,3 +48,16 @@ test('header mapping resists reorder and fails on missing required (#14)', () =>
   assert.equal(rowToTenderMapped(['x', 'not-numeric', '', '', '', '', '', '', ''], map), null);
   assert.throws(() => mapHeaders(['S.No', 'Department', 'Something']), /required column/);
 });
+
+test('clampMessage strips tags when forced to cut (v7 #8)', async () => {
+  const { clampMessage } = await import('../src/notifier.js');
+  const huge = '<b>' + 'x'.repeat(5000) + '</b> &amp; <code>tail</code>';
+  const out = clampMessage(huge);
+  assert.ok(out.length <= 3950);
+  assert.ok(!/<b>|<code>/.test(out)); // no live tags that could be cut open
+});
+
+test('esc is exported and escapes health-message hazards (v7 #7)', async () => {
+  const { esc } = await import('../src/notifier.js');
+  assert.equal(esc('waiting for selector "<div> & co"'), 'waiting for selector "&lt;div&gt; &amp; co"');
+});

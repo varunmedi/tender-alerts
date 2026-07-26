@@ -1,4 +1,4 @@
-# AP Tender Alerts → Telegram — Varun's Ops Guide (v6.1)
+# AP Tender Alerts → Telegram — Varun's Ops Guide (v7.1)
 
 Self-hosted bot watching the AP eProcurement portal on an adaptive IST schedule.
 Alerts the **"Tenders"** Telegram group on new (🔔), re-released (🔁), and amended
@@ -7,7 +7,7 @@ Oracle Cloud Always Free (Hyderabad). ₹0/month.
 
 **Production state (verified 25 Jul 2026):** Node 24.18.0 LTS · Playwright 1.61 ·
 per-search isolated sessions · full 4-search cycle ≈ **34s** · POST-verified
-filters · 9-test suite passing · crash/reboot recovery live-verified.
+filters · **12-test suite + CI workflow** · crash/reboot recovery live-verified.
 
 ## Tech stack
 
@@ -35,9 +35,10 @@ Stack verdict (3 external reviews concur): Node+Playwright+JSON optimal.
 | `aptransco-telecom` | APTRANSCO PRODUCTS (1766) | SE Telecom Circle Vskp (**1781**) |
 
 The IDs are not just documentation — **every Apply's captured POST body is
-asserted against them** (see Filter integrity below). When adding a search,
-run it once, read the IDs from the `POST (auto):` log line, and add them to
-config to arm the guard.
+asserted against them**, and since v7 config validation REQUIRES them (a
+search without numeric `deptId`/`subDeptId` refuses to start, so the guard
+can never be silently unarmed). When adding a search: temporarily set the IDs
+after one `--debug` run by reading the `POST (auto):` log line.
 
 ## Filter integrity (v6.1 — three layers)
 
@@ -83,14 +84,31 @@ SessionTimeOut.jsp.
 
 ## Safety guarantees (v6 + v6.1)
 
-- Fail-closed pagination with DataTables count verification — sweeps never run
-  on partial data
+- Pagination pages until the Next control disables, deduping by tender ID;
+  when the portal exposes a DataTables total it is cross-checked (mismatch =
+  fail), and when that count element is absent (this portal often omits it,
+  even for multi-page results) the scraper warns and falls back to the proven
+  page-until-disabled behaviour rather than dropping tenders — so sweeps never
+  run on truncated data, but valid results are never blocked either
 - **POST filter verification** — alerts never come from the wrong sub-department
 - Live-tender race guard; per-result processing isolation; transient retry
   (one, in a fresh context); idempotent cleanup with `notify:"failed"` +
   give-up warnings; header-mapped columns; ambiguity hard-fail; strict env
   parsing; 4096-char clamping; ENOENT/corrupt/IO distinction; `--once` exit
   code 1 on failures with `N ok, M failed, K alerts` summary
+
+## Schedule (adaptive, IST via Intl — OS-timezone independent)
+
+- **Mon–Sat, 09:00–19:00 IST** → check every **15 min** (office hours, when
+  departments actually publish)
+- **Nights, and all of Sunday** → every **60 min**
+- 10-minute politeness floor; the schedule is recomputed every cycle from IST
+  regardless of the server clock, and flips automatically at 09:00 Mon — no
+  restart needed. Sundays run a full set of checks, just hourly; a Sunday
+  publication is caught within the hour rather than 15 min.
+- Tune in `.env`: `ACTIVE_START_HOUR`, `ACTIVE_END_HOUR`,
+  `ACTIVE_INTERVAL_MINUTES`, `QUIET_INTERVAL_MINUTES`, or `ADAPTIVE_SCHEDULE=0`
+  for a fixed `POLL_INTERVAL_MINUTES`.
 
 ## Operations (bash on server; PowerShell only for ssh/scp)
 
@@ -123,8 +141,11 @@ pm2 flush tender-alerts   # clear historical log noise after deploys
   update the header aliases in scraper.js.
 - **"matches N options equally"** → dropdown labels changed; make config text
   more specific (see `debug/<id>-selects.json`).
-- **"pagination integrity failure"** → transient (auto-retried); recurring =
-  DataTables markup changed.
+- **"pagination integrity failure"** → collected count disagreed with the
+  portal's reported total (transient, auto-retried); recurring = markup change.
+- **"paging until Next disables (count cross-check skipped)"** → informational,
+  NOT an error: this portal often omits its count element even when paginated
+  (GVMC-Electrical logs this every cycle) — all tenders are still collected.
 - **"Another instance holds bot.lock"** → stop PM2 for manual runs.
 - State corruption → auto-backup `seen.json.corrupt-<ts>` + ⚠️ to group; I/O
   errors intentionally crash. Old error-log noise → `pm2 flush`.
@@ -173,3 +194,36 @@ test/*.test.js    node:test suite (9)
   correctness. Verified live: gvmc-it POSTs 5889, extracts its real 3 tenders;
   all four searches `4 ok, 0 failed`.
   Deferred: full fixture suite + CI; git hygiene; credential rotation.
+- **v7 (26 Jul) — Correctness & Testability (review 4).** Silent-loop
+  post-mortem hardening + reviewer items: **PM2 entry-guard fixed via
+  NODE_TEST_CONTEXT** (the argv-based guard no-oped under PM2's fork wrapper →
+  22,000+ silent restarts; reviewer's `import.meta.main` suggestion REJECTED —
+  it would be false under the same PM2 wrapper and reintroduce the loop).
+  Transient classification completed (SessionTimeOut bounce, portal
+  navigation, login-readiness now retried in a fresh context); Chromium
+  auto-relaunch if the browser process dies mid-cycle; pagination advance now
+  tracked via the DataTables info text (no hardcoded columns, immune to
+  equal-first-ID pages); DataTables reported-total cross-checked when present
+  and ADVISORY with page-until-disabled fallback when absent (a v7 hotfix: an
+  initial "required" version false-failed the 3 single-page searches and then
+  GVMC-Electrical, whose paginated table has no count element on this portal —
+  the guard now warns and falls back instead of dropping tenders);
+  conflicting duplicate Tender IDs fail closed; POST capture restricted to
+  main-frame navigation requests; pre-submit dropdown-value assertion against
+  config; **numeric portal IDs required by validation**; success/healthy
+  tallied only after lifecycle persistence (no more double-counted searches or
+  premature ✅); health messages HTML-escaped (error text with < > & no longer
+  kills the notification); clamping strips tags instead of cutting through
+  markup; store version 4 with future-version refusal (preserved as backup +
+  warning, never silently downgraded); PID-reuse-proof lock via /proc start
+  time; last deprecated waitForNavigation removed; dead code removed
+  (positional parser, polling waiter). Added: `.nvmrc`, `packageManager`,
+  GitHub Actions CI (`ci.yml` → `.github/workflows/`), 3 new tests (12 total).
+  Repo action still yours: commit the server-regenerated package-lock.json.
+- **v7.1 (26 Jul) — live-fix + docs.** Count-verification made advisory with a
+  page-until-disabled fallback and a hardened multi-selector total parser
+  (fixed three over-strict v7 failures caught in field runs: single-page
+  searches, then GVMC-Electrical's count-less paginated table). Verified live:
+  all four searches `4 ok, 0 failed`, GVMC-Electrical extracts 15 via the
+  fallback, PM2 stable at restarts 0. README: explicit Sunday/adaptive-schedule
+  section; count-check wording corrected to match shipped behaviour.

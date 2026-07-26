@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { chromium } from 'playwright';
-import { CONFIG, PORTAL_URL, HOME_URL } from './config.js';
+import { CONFIG, HOME_URL } from './config.js';
 
 /**
  * AP eProcurement scraper — v3 (performance rewrite).
@@ -67,23 +67,6 @@ async function screenshot(page, name) {
 
 /** Columns: 0 Dept | 1 Tender ID | 2 Notice No | 3 Category | 4 Name of Work
  *  | 5 ECV | 6 Start | 7 Closing | 8 Action. ID must be numeric. */
-function rowToTender(clean) {
-  if (clean.length < 8) return null;
-  if (!/^\d{4,}$/.test(clean[1])) return null;
-  return {
-    department: clean[0] || null,
-    tenderId: clean[1],
-    noticeNumber: clean[2] || null,
-    category: clean[3] || null,
-    title: clean[4] || 'Untitled tender',
-    value: clean[5] || null,
-    publishedDate: clean[6] || null,
-    closingDate: clean[7] || null,
-    emd: null,
-    _raw: clean,
-  };
-}
-
 const REQUIRED_HEADERS = {
   tenderId: ['tender id'],
   title: ['name of work'],
@@ -163,11 +146,32 @@ async function parseResultsTable(page) {
 
 /** DataTables' own reported total ("Showing 1 to 10 of 27 entries"). */
 async function getReportedTotal(page) {
+  // DataTables renders its count in an ".._info" element, but the exact id/
+  // class varies and small result sets omit it. Try several selectors, then
+  // fall back to scanning any "…of N entries" text in the document.
   return page
     .evaluate(() => {
-      const info = document.querySelector('#pagetable13_info');
-      const m = (info?.textContent || '').match(/of\s+([\d,]+)\s+entr/i);
-      return m ? parseInt(m[1].replace(/,/g, ''), 10) : null;
+      const parse = (txt) => {
+        const m = (txt || '').match(/of\s+([\d,]+)\s+entr/i);
+        return m ? parseInt(m[1].replace(/,/g, ''), 10) : null;
+      };
+      const candidates = [
+        document.querySelector('#pagetable13_info'),
+        document.querySelector('[id$="_info"]'),
+        document.querySelector('.dataTables_info'),
+      ];
+      for (const el of candidates) {
+        const n = parse(el?.textContent);
+        if (Number.isInteger(n)) return n;
+      }
+      // Last resort: scan text nodes for the DataTables phrasing.
+      for (const el of document.querySelectorAll('div, span, td, p')) {
+        if (/of\s+[\d,]+\s+entr/i.test(el.textContent || '')) {
+          const n = parse(el.textContent);
+          if (Number.isInteger(n)) return n;
+        }
+      }
+      return null;
     })
     .catch(() => null);
 }
@@ -182,10 +186,17 @@ async function waitForTenderTable(page, timeoutMs = 20000) {
       () => {
         const tbody = document.querySelector('#pagetable13 tbody');
         if (!tbody) return false;
+        // Derive the Tender ID column from the HEADER, not position — a
+        // reordered column must not cause a bogus timeout here.
+        const table = document.querySelector('#pagetable13');
+        const headers = [...(table?.querySelectorAll('thead th, tr th') || [])]
+          .map((c) => (c.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim());
+        let idIdx = headers.findIndex((h) => h.includes('tender id'));
+        if (idIdx < 0) idIdx = 1; // portal's historical position as fallback
         const rows = [...tbody.querySelectorAll('tr')];
         const hasRows = rows.some((row) => {
           const cells = row.querySelectorAll('td');
-          return cells.length >= 8 && /^\d{4,}$/.test((cells[1]?.textContent || '').trim());
+          return cells.length >= 3 && /^\d{4,}$/.test((cells[idIdx]?.textContent || '').trim());
         });
         if (hasRows) return 'rows';
         const text = (tbody.textContent || '').toLowerCase();
@@ -207,36 +218,57 @@ async function waitForTenderTable(page, timeoutMs = 20000) {
   }
 }
 
-/** Wait (condition-based) until at least one valid tender row exists. */
-async function waitForResults(page, timeoutMs = 15000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const tenders = await parseResultsTable(page);
-    if (tenders.length) return tenders;
-    await page.waitForTimeout(700);
-  }
-  return [];
-}
-
 async function collectAllPages(page, maxPages = 50) {
   const all = [];
-  const seen = new Set();
+  const byId = new Map();
   const reportedTotal = await getReportedTotal(page);
+
+  // Whether the result set spans multiple pages (a Next control exists and
+  // is enabled). Single-page results legitimately have NO info element on
+  // this portal, so requiring a total there would false-fail good scrapes
+  // (it did — v7 broke 3 working searches). We therefore require the total
+  // ONLY when pagination is present, since that's the only case where a
+  // missing/unparseable count could hide truncated results.
+  const isPaginated = await page
+    .evaluate(() => {
+      const next = document.querySelector('#pagetable13_next');
+      return !!next && !next.classList.contains('disabled');
+    })
+    .catch(() => false);
+
+  if (isPaginated && !Number.isInteger(reportedTotal)) {
+    // The count element isn't reliably present on this portal even when
+    // paginated. Rather than fail good data, fall back to the proven
+    // behavior: page until Next disables, deduping by ID. We lose only the
+    // extra cross-check, not the tenders. (Was a hard failure in v7 — that
+    // blocked GVMC-Electrical's 15 real tenders.)
+    console.warn(
+      'paginated results but DataTables total is unreadable — ' +
+        'paging until Next disables (count cross-check skipped this run).'
+    );
+  }
 
   for (let pageNumber = 1; pageNumber <= maxPages; pageNumber++) {
     const current = await parseResultsTable(page);
     for (const t of current) {
-      if (!seen.has(t.tenderId)) {
-        seen.add(t.tenderId);
+      const existing = byId.get(t.tenderId);
+      if (!existing) {
+        byId.set(t.tenderId, t);
         all.push(t);
+      } else if (JSON.stringify(existing._raw) !== JSON.stringify(t._raw)) {
+        // Same ID, different data: never silently pick one — a lifecycle
+        // sweep from ambiguous data could retire/alert the wrong thing.
+        throw scrapeError(
+          `tender ${t.tenderId} appeared twice with conflicting data — refusing results`
+        );
       }
     }
 
-    const previousFirstId = await page
-      .evaluate(() => {
-        const td = document.querySelector('#pagetable13 tbody tr td:nth-child(2)');
-        return td ? td.textContent.trim() : null;
-      })
+    // Advance-detection via the DataTables info text ("Showing 11 to 20 of
+    // 27 entries") — robust against two pages starting with the same ID and
+    // free of any hardcoded column position.
+    const previousInfo = await page
+      .evaluate(() => document.querySelector('#pagetable13_info')?.textContent.trim() ?? null)
       .catch(() => null);
 
     const advanced = await page
@@ -249,27 +281,24 @@ async function collectAllPages(page, maxPages = 50) {
       .catch(() => false);
 
     if (!advanced) {
-      // Natural end of pagination — verify against DataTables' own count.
-      // NEVER let sweeps run from a known-partial dataset (fail closed).
-      if (reportedTotal != null && seen.size !== reportedTotal) {
+      // Verify against the portal's own count when we have it; a single-page
+      // result with no info element simply returns the rows we parsed.
+      if (Number.isInteger(reportedTotal) && byId.size !== reportedTotal) {
         throw scrapeError(
-          `pagination integrity failure: portal reports ${reportedTotal} entries, collected ${seen.size}`,
+          `pagination integrity failure: portal reports ${reportedTotal} entries, collected ${byId.size}`,
           true
         );
       }
       return all;
     }
 
-    // FAIL CLOSED: if DataTables doesn't advance, parsing the same page
-    // again and returning would silently truncate — and false-retire
-    // tenders sitting on unread pages.
     const advancedOk = await page
       .waitForFunction(
         (prev) => {
-          const td = document.querySelector('#pagetable13 tbody tr td:nth-child(2)');
-          return td && td.textContent.trim() !== prev;
+          const info = document.querySelector('#pagetable13_info');
+          return info && info.textContent.trim() !== prev;
         },
-        previousFirstId,
+        previousInfo,
         { timeout: 5000 }
       )
       .then(() => true)
@@ -328,16 +357,26 @@ async function ensureTenderDetails(page, tag, force = false) {
   if (!force && (await onDetails())) return;
 
   console.log(`[${tag}] establishing portal session…`);
-  await page.goto(HOME_URL, {
-    waitUntil: 'domcontentloaded',
-    timeout: CONFIG.navTimeout,
-  });
+  try {
+    await page.goto(HOME_URL, {
+      waitUntil: 'domcontentloaded',
+      timeout: CONFIG.navTimeout,
+    });
+  } catch (e) {
+    throw scrapeError(`portal navigation failed: ${e.message}`, true);
+  }
 
   if (page.url().includes('SessionTimeOut')) {
     dbg('security-error page — clicking home link');
     await clickHomeFromErrorPage(page);
+    // Wait for the actual state we need (the login form), not a generic
+    // navigation event — waitForNavigation is deprecated and racy.
     await page
-      .waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 15000 })
+      .waitForFunction(
+        () => document.loginForm || document.getElementById('loginForm'),
+        undefined,
+        { timeout: 15000 }
+      )
       .catch(() => {});
   }
   await screenshot(page, `${tag}-01-homepage`);
@@ -354,9 +393,10 @@ async function ensureTenderDetails(page, tag, force = false) {
       { timeout: 30000 }
     )
     .catch(() => {
-      throw new Error(
+      throw scrapeError(
         'login.html loaded but loginForm/temp/tempName never became ready. ' +
-          'Run with --debug and check ' + tag + '-01-homepage.png.'
+          'Run with --debug and check ' + tag + '-01-homepage.png.',
+        true
       );
     });
 
@@ -389,9 +429,10 @@ async function ensureTenderDetails(page, tag, force = false) {
   if (!(await onDetails())) {
     await saveDebug(`${tag}-homepage-dump.html`, await page.content().catch(() => ''));
     await screenshot(page, `${tag}-homepage-dump`);
-    throw new Error(
+    throw scrapeError(
       `Could not reach TenderDetailsHome.html (stuck at ${page.url()}). ` +
-        'See debug/' + tag + '-homepage-dump.* for what rendered.'
+        'See debug/' + tag + '-homepage-dump.* for what rendered.',
+      true
     );
   }
   console.log(`[${tag}] on Tender Details page.`);
@@ -560,6 +601,13 @@ async function setFilters(page, search) {
         true
       );
     }
+    if (search.subDeptId && verified.value !== search.subDeptId) {
+      throw scrapeError(
+        `sub-department value mismatch before submit: expected ${search.subDeptId}, ` +
+          `dropdown holds ${verified.value}`,
+        true
+      );
+    }
     console.log(`[${tag}] sub-department set: ${subLabel} (value ${verified.value})`);
   }
   await screenshot(page, `${tag}-02-filters-set`);
@@ -584,7 +632,7 @@ async function applyAndParse(page, search, postCaptures) {
     }), CONFIG.navTimeout);
 
   if (page.url().includes('SessionTimeOut')) {
-    throw new Error('Apply POST bounced to SessionTimeOut.jsp');
+    throw scrapeError('Apply POST bounced to SessionTimeOut.jsp', true);
   }
 
   // Persist the POST body for diagnostics (same artifact as before).
@@ -658,15 +706,17 @@ async function applyAndParse(page, search, postCaptures) {
 export async function* scrapeSearchesStream(searches) {
   // --debug  = save extra artifacts, stays HEADLESS (works on the server)
   // --headed = open a visible browser (needs a desktop; use on the laptop)
+  const launchBrowser = () =>
+    chromium.launch({
+      headless: !CONFIG.headed,
+      args: [
+        '--disable-blink-features=AutomationControlled',
+        ...(CONFIG.headed ? ['--start-maximized'] : []),
+      ],
+    });
   let browser;
   try {
-  browser = await chromium.launch({
-    headless: !CONFIG.headed,
-    args: [
-      '--disable-blink-features=AutomationControlled',
-      ...(CONFIG.headed ? ['--start-maximized'] : []),
-    ],
-  });
+  browser = await launchBrowser();
   // Each search runs in its OWN fresh context (isolated cookies, session, and
   // anti-tamper tokens). A shared context re-navigated per search caused the
   // portal to invalidate its own session tokens → "Apply bounced to
@@ -698,7 +748,13 @@ export async function* scrapeSearchesStream(searches) {
     const context = await newSearchContext();
     context.on('request', (req) => {
       try {
-        if (req.method() === 'POST' && req.url().includes('TenderDetailsHome.html')) {
+        // Navigation requests only: a future AJAX POST to the same endpoint
+        // must never masquerade as the Apply submission we verify against.
+        if (
+          req.method() === 'POST' &&
+          req.isNavigationRequest() &&
+          new URL(req.url()).pathname.endsWith('/TenderDetailsHome.html')
+        ) {
           postCaptures.push(req.postData() || '');
         }
       } catch {
@@ -720,6 +776,11 @@ export async function* scrapeSearchesStream(searches) {
     const started = Date.now();
     let result;
     try {
+      // One Chromium crash must not doom the remaining searches: relaunch.
+      if (!browser.isConnected()) {
+        console.warn('browser process disconnected — relaunching Chromium…');
+        browser = await launchBrowser();
+      }
       const postCaptures = []; // per-search: no cross-talk between searches
       let outcome;
       try {

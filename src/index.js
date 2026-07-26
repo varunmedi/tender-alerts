@@ -10,7 +10,7 @@ import {
 } from './store.js';
 import {
   sendTelegram, deleteTelegramMessage, editTelegramMessage, isAlreadyCompleted,
-  formatTenderMessage, formatUpdateMessage, formatWithdrawnTombstone, pause,
+  formatTenderMessage, formatUpdateMessage, formatWithdrawnTombstone, pause, esc,
 } from './notifier.js';
 
 /**
@@ -29,10 +29,27 @@ const LOCK_DIR = path.join(path.dirname(CONFIG.seenStorePath), 'bot.lock');
 const OWNER_FILE = path.join(LOCK_DIR, 'owner.json');
 const myToken = crypto.randomUUID();
 
+/** Kernel start-time of a PID (field 22 of /proc/<pid>/stat); null if gone.
+ *  Same PID + different start time = the PID was REUSED by another process,
+ *  so the lock is stale even though kill(pid, 0) would succeed. */
+function procStartTime(pid) {
+  try {
+    const stat = fs.readFileSync(`/proc/${pid}/stat`, 'utf8');
+    return stat.slice(stat.lastIndexOf(')') + 2).split(' ')[19] ?? null;
+  } catch {
+    return null;
+  }
+}
+
 function tryAcquire() {
   try {
     fs.mkdirSync(LOCK_DIR); // atomic: fails with EEXIST if held
-    fs.writeFileSync(OWNER_FILE, JSON.stringify({ pid: process.pid, token: myToken, at: new Date().toISOString() }));
+    fs.writeFileSync(OWNER_FILE, JSON.stringify({
+      pid: process.pid,
+      startTime: procStartTime(process.pid),
+      token: myToken,
+      at: new Date().toISOString(),
+    }));
     return true;
   } catch (e) {
     if (e.code !== 'EEXIST') throw e;
@@ -52,12 +69,11 @@ function acquireLock() {
   }
   let alive = false;
   if (owner?.pid) {
-    try {
-      process.kill(owner.pid, 0);
-      alive = true;
-    } catch {
-      alive = false;
-    }
+    const now = procStartTime(owner.pid);
+    // Alive = process exists AND is the SAME process that took the lock
+    // (matching start time defeats PID reuse; missing recorded start time
+    // falls back to plain existence for older owner files).
+    alive = now !== null && (!owner.startTime || now === owner.startTime);
   }
   if (alive) {
     console.error(
@@ -111,7 +127,7 @@ async function trackHealth(search, ok, detail) {
   const st = failState[search.id] || (failState[search.id] = { count: 0, firstAt: null });
   if (ok) {
     if (st.count >= FAIL_NOTIFY_AT) {
-      await notifyHealth(`✅ <b>Tender bot recovered</b> — "${search.label}" is scraping normally again.`);
+      await notifyHealth(`✅ <b>Tender bot recovered</b> — "${esc(search.label)}" is scraping normally again.`);
     }
     st.count = 0;
     st.firstAt = null;
@@ -122,9 +138,11 @@ async function trackHealth(search, ok, detail) {
   if (st.count === FAIL_NOTIFY_AT) {
     await notifyHealth(
       `⚠️ <b>Tender bot needs attention</b>\n` +
-        `"${search.label}" has had ${FAIL_NOTIFY_AT} consecutive failed checks ` +
+        `"${esc(search.label)}" has had ${FAIL_NOTIFY_AT} consecutive failed checks ` +
         `over ~${humanDuration(Date.now() - st.firstAt)}.\n` +
-        `Last issue: ${detail}\n\n` +
+        // Escaped: error text often contains < > & (selectors, HTML fragments)
+        // which would make Telegram reject the whole health message as bad HTML.
+        `Last issue: ${esc(detail)}\n\n` +
         `SSH in and run: pm2 logs tender-alerts --lines 50 --nostream`
     );
   }
@@ -185,8 +203,6 @@ async function processSearchResult({ search, status, tenders, error }, summary) 
     await trackHealth(search, false, `${status}: ${error || 'unknown scrape failure'}`.slice(0, 300));
     return;
   }
-  summary.successful++;
-  await trackHealth(search, true);
   if (status === 'empty') console.log(`[${search.id}] confirmed empty department this check.`);
 
   let newCount = 0;
@@ -298,6 +314,12 @@ async function processSearchResult({ search, status, tenders, error }, summary) 
     }
   }
 
+  // Success is tallied ONLY here — after sweeps, baselines, and cleanup have
+  // all persisted. A search whose lifecycle processing throws is counted
+  // failed by the caller's isolation handler, never double-counted, and no
+  // premature ✅ recovery can fire before its state is actually safe.
+  summary.successful++;
+  await trackHealth(search, true);
   console.log(`[${search.id}] done. ${tenders.length} tenders found, ${newCount} alert(s) sent.`);
 }
 
@@ -384,7 +406,7 @@ async function main() {
 
   if (storeLoadWarning) {
     // AWAITED: --once must not exit before this warning is delivered.
-    await notifyHealth(`⚠️ <b>Tender bot state warning</b>\n${storeLoadWarning}`);
+    await notifyHealth(`⚠️ <b>Tender bot state warning</b>\n${esc(storeLoadWarning)}`);
   }
 
   if (process.argv.includes('--once')) {

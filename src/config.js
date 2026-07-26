@@ -132,7 +132,9 @@ export function assertConfig() {
     errors.push('ACTIVE_START_HOUR must be earlier than ACTIVE_END_HOUR');
   }
 
-  // Searches: unique ids, required fields
+  // Searches: unique ids, required fields, and REQUIRED numeric portal IDs —
+  // without deptId/subDeptId the POST filter-verification guard is silently
+  // unarmed for that search (the strongest correctness protection we have).
   const ids = new Set();
   for (const s of SEARCHES) {
     if (!s.id || !s.label || !s.department) {
@@ -140,6 +142,12 @@ export function assertConfig() {
     }
     if (ids.has(s.id)) errors.push(`duplicate search id "${s.id}"`);
     ids.add(s.id);
+    if (!/^\d+$/.test(s.deptId || '')) {
+      errors.push(`${s.id}: deptId must be a numeric portal ID (read it from the "POST (auto):" log line)`);
+    }
+    if (s.subDepartment && !/^\d+$/.test(s.subDeptId || '')) {
+      errors.push(`${s.id}: subDeptId is required when subDepartment is configured`);
+    }
   }
 
   if (errors.length) {

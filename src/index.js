@@ -419,10 +419,14 @@ async function main() {
   loop();
 }
 
-// Only run when executed directly — imports (tests) get pure functions only.
-import { pathToFileURL } from 'url';
-const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
-if (isMain) {
+// Run main() always EXCEPT under the node:test runner (which imports this
+// module for its exports). Detecting the test runner via NODE_TEST_CONTEXT is
+// robust; the previous argv[1]-vs-import.meta.url check silently returned
+// false under PM2 fork mode (argv[1] is PM2's ProcessContainerFork.js), so
+// main() never ran, the process exited 0, and PM2 restart-looped it 22,000+
+// times with completely empty logs.
+const isTestRun = !!process.env.NODE_TEST_CONTEXT;
+if (!isTestRun) {
   main().catch((e) => {
     console.error(e);
     process.exitCode = 1;

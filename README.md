@@ -1,4 +1,4 @@
-# AP Tender Alerts → Telegram — Varun's Ops Guide (v8)
+# AP Tender Alerts → Telegram — Varun's Ops Guide (v9.1)
 
 Self-hosted bot watching the AP eProcurement portal on an adaptive IST schedule.
 Alerts the **"Tenders"** Telegram group on new (🔔), re-released (🔁), and amended
@@ -7,7 +7,7 @@ Oracle Cloud Always Free (Hyderabad). ₹0/month.
 
 **Production state (verified 25 Jul 2026):** Node 24.18.0 LTS · Playwright 1.61 ·
 per-search isolated sessions · full 4-search cycle ≈ **34s** · POST-verified
-filters · **15-test suite + CI workflow** · crash/reboot recovery live-verified.
+filters · **17-test suite (incl. real child-process integration tests) + CI** · crash/reboot recovery live-verified.
 
 ## Tech stack
 
@@ -120,6 +120,21 @@ npm run debug     # artifacts, headless (server-safe) · npm run headed = laptop
 pm2 flush tender-alerts   # clear historical log noise after deploys
 ```
 
+- **Completeness model:** each scrape reports `verified` (portal's own count
+  matched what we collected, or the portal explicitly said "no records") or
+  `best-effort` (paged until Next disabled, count unavailable). New tenders are
+  ALWAYS alerted; **withdrawal sweeps run only on `verified` results**, so
+  tenders on an unread page can never be mistaken for withdrawn. Repeated
+  `best-effort` cycles raise a warning.
+- **`STATE_CORRUPTION_POLICY`** (`.env`): `recover` (default — back up
+  `seen.json`, start fresh, warn the group; keeps an unattended bot alerting)
+  or `halt` (refuse to start; safest against missed alerts but means zero
+  alerts until you intervene).
+- **`HOME_URL` / `PORTAL_URL` / `NAV_TIMEOUT_MS`** (`.env`, optional): override
+  the portal endpoints and per-navigation timeout. Production leaves these
+  UNSET (real portal, 60s). They exist so the test suite can force a fast,
+  deterministic scrape failure against an unreachable host — independent of
+  whether the real portal is reachable from wherever the tests run.
 - **Health heartbeat:** `cat data/status.json` — last cycle times, duration,
   per-search `consecutiveFailures` / `lastSuccessAt` / `lastError` /
   `lastTenderCount`. Counters are DURABLE across restarts, so a repeatedly
@@ -163,6 +178,7 @@ pm2 flush tender-alerts   # clear historical log noise after deploys
 ```
 src/index.js      executable wrapper ONLY (PM2 entrypoint) — no guard needed
 src/app.js        all logic + test exports: lock, scheduler, lifecycle, health
+src/health-store.js  validated status.json I/O (ENOENT/corrupt/IO distinct)
 src/config.js     searches WITH portal IDs; schedule; strict envInt; validation
 src/scraper.js    per-search isolated contexts; POST guard; verified pagination;
                   header-mapped parse; ambiguity detection; marker navigation
@@ -270,3 +286,45 @@ test/*.test.js    node:test suite (9)
   is worse than none; they remain the largest real gap.
   Repo actions still yours: commit the regenerated `package-lock.json`, add
   `.github/workflows/ci.yml`, push the current README, rotate credentials.
+- **v9 (27 Jul) — Delivery Integrity (review 6).** **Health warnings can no
+  longer be lost:** v8 set `warned=true` *before* the Telegram send and
+  swallowed failures, so one outage meant the alert never arrived — delivery
+  is now a persisted state machine (`warning-pending` → `warned`,
+  `recovery-pending` → cleared only on confirmed delivery) that retries every
+  cycle. **Graceful shutdown:** SIGTERM/SIGINT now stop scheduling and await
+  the active cycle (bounded) instead of `process.exit(0)` mid-send — which
+  could kill after Telegram accepted a message but before `markSent` persisted
+  it, duplicating alerts; PM2's `kill_timeout` is now meaningful.
+  **`verified` vs `best-effort` integrity:** the advisory-count compromise
+  left unverified results feeding `sweepMissing` exactly like verified ones —
+  an early-stopping pagination could retire unread-page tenders. New tenders
+  are still always alerted (never block real data), but withdrawal sweeps are
+  suppressed unless completeness is proven; `status: 'empty'` counts as
+  verified so emptied departments still retire correctly. Transient
+  classification completed: dropdown evaluation failures no longer masquerade
+  as "Department not found", slow/failed `getCircles()` AJAX is retryable
+  while a genuinely-populated-but-missing label stays permanent, and
+  Playwright `TimeoutError` is retryable. `lastSuccessfulCycleAt` survives a
+  restart+failure; corrupt `status.json` backs up and warns instead of
+  silently zeroing monitoring; `updateKnownTender` throws on an unknown key
+  instead of no-oping. New `STATE_CORRUPTION_POLICY` (default `recover`,
+  deliberately: for an unattended bot, halting means zero alerts until
+  noticed — and with warning delivery now reliable, the operator is told).
+  **Tests made real:** v8's future-version and health-persistence tests only
+  constructed an error object and checked declaration order; they are replaced
+  with child-process integration tests that actually run the bot and assert
+  exit codes, file preservation, counter accumulation across restarts, and
+  both corruption policies (17 tests). CI now installs Chromium so browser
+  fixture tests can be added. Stale v3-era file headers corrected.
+  Repo actions still yours: regenerate/commit `package-lock.json`, push
+  `.github/workflows/ci.yml` and this README, rotate credentials.
+- **v9.1 (27 Jul) — test determinism.** Two v9 integration tests assumed the
+  portal would be UNREACHABLE (true in the CI/authoring sandbox, false on the
+  server) and so failed when run on the live host — the bot was correct, the
+  tests' expectations were environment-dependent. Fixed by pointing
+  `HOME_URL`/`PORTAL_URL` at an unroutable address to force a deterministic,
+  fast failure everywhere; `HOME_URL`/`PORTAL_URL`/`NAV_TIMEOUT_MS` are now
+  env-overridable (production defaults unchanged). Also isolates every test's
+  store path so runs never touch real `seen.json`. Full suite: 17 pass in
+  ~29s (was 143s — the old tests were scraping the live portal). No bot
+  behaviour changed; this is a test-and-config-plumbing release.

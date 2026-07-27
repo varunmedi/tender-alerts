@@ -12,6 +12,10 @@ import {
   sendTelegram, deleteTelegramMessage, editTelegramMessage, isAlreadyCompleted,
   formatTenderMessage, formatUpdateMessage, formatWithdrawnTombstone, pause, esc,
 } from './notifier.js';
+import {
+  loadStatus, seedHeartbeat, hydrateFailState, serializeFailState,
+  writeHeartbeat, healthLoadWarning, NOTIFY,
+} from './health-store.js';
 
 /**
  * Application module (v8): ALL orchestration logic lives here and is
@@ -110,76 +114,34 @@ function releaseLock() {
   }
 }
 
-// ---------------- heartbeat / status file ----------------
+// ---------------- heartbeat / health (see health-store.js) ----------------
 
-const STATUS_PATH = path.join(path.dirname(CONFIG.seenStorePath), 'status.json');
-let lastSuccessfulCycleAt = null;
-
-function writeHeartbeat(patch) {
-  try {
-    let cur = {};
-    try {
-      cur = JSON.parse(fs.readFileSync(STATUS_PATH, 'utf8'));
-    } catch {
-      /* first write or unreadable — start fresh */
-    }
-    const tmp = STATUS_PATH + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify({ ...cur, ...patch }, null, 2));
-    fs.renameSync(tmp, STATUS_PATH);
-  } catch (e) {
-    console.warn(`heartbeat write failed: ${e.message}`);
-  }
-}
-
-// ---------------- self-monitoring ----------------
+const initialStatus = loadStatus();
+seedHeartbeat(initialStatus);
+// Preserve the historical success timestamp across restarts — a post-restart
+// FAILURE must not wipe it to null (v8 bug).
+let lastSuccessfulCycleAt = initialStatus.lastSuccessfulCycleAt ?? null;
 
 const FAIL_NOTIFY_AT = 6;
+const failState = hydrateFailState(initialStatus);
+const bestEffortStreak = {}; // consecutive unverified cycles per search
 
-// Per-search health, PERSISTED in status.json. In-memory counters reset on
-// every restart, so a bot that keeps restarting would never accumulate the
-// 6 consecutive failures needed to warn — exactly the blind spot that hid a
-// 22,000-restart loop. Durable counters close it. `warned` makes the alert
-// edge-triggered (fires once, even if the count is loaded already past the
-// threshold) and drives the matching ✅ recovery.
-const failState = loadHealthState();
-
-function loadHealthState() {
-  try {
-    const cur = JSON.parse(fs.readFileSync(STATUS_PATH, 'utf8'));
-    const out = {};
-    for (const [id, h] of Object.entries(cur.perSearch || {})) {
-      out[id] = {
-        count: Number.isInteger(h.consecutiveFailures) ? h.consecutiveFailures : 0,
-        firstAt: h.firstFailureAt ? Date.parse(h.firstFailureAt) || null : null,
-        warned: !!h.warned,
-      };
-    }
-    return out;
-  } catch {
-    return {}; // no status file yet, or unreadable — start clean
-  }
+if (healthLoadWarning) {
+  // surfaced to the group by main() alongside any store warning
 }
 
 function persistHealthState() {
-  const perSearch = {};
-  for (const [id, st] of Object.entries(failState)) {
-    perSearch[id] = {
-      consecutiveFailures: st.count,
-      firstFailureAt: st.firstAt ? new Date(st.firstAt).toISOString() : null,
-      warned: st.warned,
-      lastSuccessAt: st.lastSuccessAt || null,
-      lastError: st.lastError || null,
-      lastTenderCount: st.lastTenderCount ?? null,
-    };
-  }
-  writeHeartbeat({ perSearch });
+  writeHeartbeat({ perSearch: serializeFailState(failState) });
 }
 
-async function notifyHealth(text) {
+/** Attempt a health message; return whether Telegram accepted it. */
+async function tryNotifyHealth(text) {
   try {
     await sendTelegram(text);
+    return true;
   } catch (e) {
     console.error(`health notification failed: ${e.message}`);
+    return false;
   }
 }
 
@@ -188,42 +150,75 @@ function humanDuration(ms) {
   return mins >= 90 ? `${(mins / 60).toFixed(1)} h` : `${mins} min`;
 }
 
+function warningText(search, st) {
+  return (
+    `⚠️ <b>Tender bot needs attention</b>\n` +
+    `"${esc(search.label)}" has had ${st.count} consecutive failed checks ` +
+    `over ~${humanDuration(Date.now() - (st.firstAt || Date.now()))}.\n` +
+    // Escaped: error text often contains < > & which would make Telegram
+    // reject the whole health message as malformed HTML.
+    `Last issue: ${esc(st.lastError || 'unknown')}\n\n` +
+    `SSH in and run: pm2 logs tender-alerts --lines 50 --nostream`
+  );
+}
+
+/**
+ * Notification state machine — a warning is marked WARNED only AFTER Telegram
+ * accepts it, so a failed send is retried next cycle instead of being lost
+ * (v8 set warned=true before sending). Recovery likewise clears state only
+ * after the ✅ is delivered.
+ */
 async function trackHealth(search, ok, detail, tenderCount = null) {
   const st =
     failState[search.id] ||
-    (failState[search.id] = { count: 0, firstAt: null, warned: false });
+    (failState[search.id] = { count: 0, firstAt: null, notification: NOTIFY.NONE });
+
   if (ok) {
-    if (st.warned) {
-      await notifyHealth(`✅ <b>Tender bot recovered</b> — "${esc(search.label)}" is scraping normally again.`);
+    const wasWarned =
+      st.notification === NOTIFY.WARNED ||
+      st.notification === NOTIFY.WARNING_PENDING ||
+      st.notification === NOTIFY.RECOVERY_PENDING;
+    st.lastSuccessAt = new Date().toISOString();
+    st.lastTenderCount = tenderCount;
+    st.lastError = null;
+    if (wasWarned) {
+      st.notification = NOTIFY.RECOVERY_PENDING;
+      persistHealthState();
+      const delivered = await tryNotifyHealth(
+        `✅ <b>Tender bot recovered</b> — "${esc(search.label)}" is scraping normally again.`
+      );
+      if (delivered) {
+        st.count = 0;
+        st.firstAt = null;
+        st.notification = NOTIFY.NONE;
+      }
+      // if not delivered: stay RECOVERY_PENDING, retry next healthy cycle
+      persistHealthState();
+      return;
     }
     st.count = 0;
     st.firstAt = null;
-    st.warned = false;
-    st.lastError = null;
-    st.lastSuccessAt = new Date().toISOString();
-    st.lastTenderCount = tenderCount;
+    st.notification = NOTIFY.NONE;
     persistHealthState();
     return;
   }
+
+  // failure
   if (st.count === 0) st.firstAt = Date.now();
   st.count += 1;
   st.lastError = String(detail || '').slice(0, 300);
-  persistHealthState();
-  // Edge-triggered: >= (not ===) so a counter restored past the threshold
-  // still warns exactly once.
-  if (st.count >= FAIL_NOTIFY_AT && !st.warned) {
-    st.warned = true;
+
+  const shouldWarn =
+    st.count >= FAIL_NOTIFY_AT &&
+    (st.notification === NOTIFY.NONE || st.notification === NOTIFY.WARNING_PENDING);
+
+  if (shouldWarn) {
+    st.notification = NOTIFY.WARNING_PENDING; // persist intent BEFORE sending
     persistHealthState();
-    await notifyHealth(
-      `⚠️ <b>Tender bot needs attention</b>\n` +
-        `"${esc(search.label)}" has had ${FAIL_NOTIFY_AT} consecutive failed checks ` +
-        `over ~${humanDuration(Date.now() - st.firstAt)}.\n` +
-        // Escaped: error text often contains < > & (selectors, HTML fragments)
-        // which would make Telegram reject the whole health message as bad HTML.
-        `Last issue: ${esc(detail)}\n\n` +
-        `SSH in and run: pm2 logs tender-alerts --lines 50 --nostream`
-    );
+    const delivered = await tryNotifyHealth(warningText(search, st));
+    st.notification = delivered ? NOTIFY.WARNED : NOTIFY.WARNING_PENDING;
   }
+  persistHealthState();
 }
 
 // ---------------- amendment fingerprints (#21: normalized) ----------------
@@ -275,7 +270,7 @@ function tenderKey(t, searchId) {
 
 // ---------------- per-search processing ----------------
 
-async function processSearchResult({ search, status, tenders, error }, summary) {
+async function processSearchResult({ search, status, tenders, error, integrity }, summary) {
   const firstRun = isFirstRunFor(search.id);
   if (firstRun) {
     console.log(
@@ -356,7 +351,21 @@ async function processSearchResult({ search, status, tenders, error }, summary) 
     }
   }
 
-  sweepMissing(search.id, currentKeys, true);
+  // Integrity gate (#3): only age-out/retire tenders when the dataset was
+  // confirmed complete. A 'best-effort' result (paged until Next disabled but
+  // the portal's own count was unavailable) still ALERTS positively-observed
+  // tenders, but must NOT drive withdrawals — an unread page could otherwise
+  // look like a batch of vanished tenders and trigger false retirements.
+  if (status === 'empty' || integrity === 'verified') {
+    sweepMissing(search.id, currentKeys, true);
+  } else {
+    bestEffortStreak[search.id] = (bestEffortStreak[search.id] || 0) + 1;
+    console.warn(
+      `[${search.id}] completeness unverified (best-effort #${bestEffortStreak[search.id]}) — ` +
+        'alerting observed tenders, withdrawal sweep SUPPRESSED this cycle.'
+    );
+  }
+  if (status === 'empty' || integrity === 'verified') bestEffortStreak[search.id] = 0;
   markSearchKnown(search.id);
 
   // Withdrawn-alert cleanup: delete (<47h) or edit to ❌ tombstone; retried
@@ -429,6 +438,35 @@ let cycleRunning = false;
 // and so a repeatedly-restarting bot is visible even though in-memory
 // failure counters reset on restart.
 
+let stopping = false;
+let activeCycle = null;
+let loopTimer = null;
+
+/**
+ * Graceful shutdown (#2): on SIGTERM/SIGINT, stop scheduling and let the
+ * in-flight cycle finish (up to a deadline) so we never tear down mid-
+ * markSent()/Telegram/atomic-write. PM2's kill_timeout (30s) gives us the
+ * window; we self-cap below it.
+ */
+function installGracefulShutdown() {
+  const shutdown = async (signal) => {
+    if (stopping) return;
+    stopping = true;
+    console.log(`${signal} received — finishing active work before exit…`);
+    if (loopTimer) clearTimeout(loopTimer);
+    if (activeCycle) {
+      await Promise.race([
+        activeCycle.catch(() => {}),
+        pause(25_000), // hard cap, safely under PM2 kill_timeout
+      ]);
+    }
+    releaseLock();
+    process.exit(0);
+  };
+  process.on('SIGINT', () => void shutdown('SIGINT'));
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+}
+
 async function runOnce() {
   const summary = { successful: 0, failed: 0, alertsSent: 0 };
   if (cycleRunning) {
@@ -439,9 +477,11 @@ async function runOnce() {
   const startedAt = new Date().toISOString();
   const startMs = Date.now();
   writeHeartbeat({ lastCycleStartedAt: startedAt, pid: process.pid });
+  activeCycle = runSearches(summary);
   try {
-    await runSearches(summary);
+    await activeCycle;
   } finally {
+    activeCycle = null;
     cycleRunning = false;
   }
   if (summary.failed === 0) lastSuccessfulCycleAt = new Date().toISOString();
@@ -507,16 +547,15 @@ export async function main() {
   assertConfig();
   acquireLock();
   process.on('exit', releaseLock);
-  for (const sig of ['SIGINT', 'SIGTERM']) {
-    process.on(sig, () => {
-      releaseLock();
-      process.exit(0);
-    });
-  }
+  installGracefulShutdown();
 
+  // Surface any state/health load warnings to the group (awaited so --once
+  // doesn't exit before delivery).
   if (storeLoadWarning) {
-    // AWAITED: --once must not exit before this warning is delivered.
-    await notifyHealth(`⚠️ <b>Tender bot state warning</b>\n${esc(storeLoadWarning)}`);
+    await tryNotifyHealth(`⚠️ <b>Tender bot state warning</b>\n${esc(storeLoadWarning)}`);
+  }
+  if (healthLoadWarning) {
+    await tryNotifyHealth(`⚠️ <b>Tender bot health-state warning</b>\n${esc(healthLoadWarning)}`);
   }
 
   if (process.argv.includes('--once')) {
@@ -530,15 +569,17 @@ export async function main() {
   }
 
   async function loop() {
+    if (stopping) return;
     console.log(`\n[${new Date().toISOString()}] scheduled check…`);
     try {
       await runOnce();
     } catch (e) {
       console.error(`cycle error: ${e.message}`);
     }
+    if (stopping) return;
     const mins = nextDelayMinutes();
     console.log(`next check in ${mins} minutes.`);
-    setTimeout(loop, mins * 60 * 1000);
+    loopTimer = setTimeout(loop, mins * 60 * 1000);
   }
 
   console.log(

@@ -3,25 +3,29 @@ import path from 'path';
 import { CONFIG } from './config.js';
 
 /**
- * Dedup + lifecycle store v3.
+ * Lifecycle + dedup store (schema v4).
  *
  * {
- *   "version": 3,
- *   "tenders": { "<searchId>::<tenderId>": {
- *       lastSeen, missing, msgId, sentAt, fp   // fp = amendment fingerprint
+ *   version: 4,
+ *   tenders: { "<searchId>::<tenderId>": {
+ *       lastSeen, missing, msgId, sentAt, fp, snapshot
  *   }},
- *   "retired": { "<key>": {
- *       retiredAt, msgId, sentAt,
- *       notify: "pending" | "done",            // withdrawn-alert cleanup state
- *       attempts: 0
+ *   retired: { "<key>": {
+ *       retiredAt, msgId, sentAt, snapshot, notify, attempts
  *   }},
- *   "searches": ["gvmc-electrical", ...]       // searches already baselined
+ *   searches: ["gvmc-electrical", ...]   // baselined searches
  * }
  *
- * Corruption handling: a missing file (ENOENT) starts fresh silently; any
- * OTHER load failure backs the bad file up as seen.json.corrupt-<ts>, starts
- * fresh, and exposes `storeLoadWarning` so the orchestrator can notify the
- * group ONCE (silent resets can suppress genuine alerts).
+ * Load discipline (each case distinct — none silently swallowed):
+ *  - ENOENT              -> fresh store
+ *  - version > supported -> UnsupportedStoreVersionError, NEVER recovered
+ *                           (an older deploy must not rewrite a newer file)
+ *  - malformed / invalid -> backup + warn; then recover or halt per
+ *                           CONFIG.stateCorruptionPolicy
+ *  - permission / I/O    -> throw (starting fresh would fail on first save)
+ *
+ * markSent/updateKnownTender persist per tender (not batched) so a crash can
+ * never re-send an alert Telegram already accepted.
  */
 
 const STORE_VERSION = 4;
@@ -129,6 +133,12 @@ function load() {
       storeLoadWarning = `State file corrupt (${error.message}); started fresh.`;
     }
     console.error(`[store] ${storeLoadWarning}`);
+    if (CONFIG.stateCorruptionPolicy === 'halt') {
+      throw new Error(
+        `${storeLoadWarning} STATE_CORRUPTION_POLICY=halt — refusing to start. ` +
+          `Inspect the backup, then restart (optionally with STATE_CORRUPTION_POLICY=recover).`
+      );
+    }
     return migrate(null);
   }
 }
@@ -184,7 +194,9 @@ export function getFingerprint(key) {
 /** Update a known tender's fingerprint (call after alerting the update). */
 export function updateKnownTender(key, { fp, snapshot }) {
   const meta = store.tenders[key];
-  if (!meta) return;
+  // Silently ignoring an impossible state hides lifecycle bugs; per-result
+  // isolation in app.js contains the blast radius to this one search.
+  if (!meta) throw new Error(`cannot update unknown tender ${key}`);
   if (fp !== undefined) meta.fp = fp;
   if (snapshot !== undefined) meta.snapshot = snapshot; // stays current for tombstones
   meta.lastSeen = new Date().toISOString();

@@ -4,24 +4,40 @@ import { chromium } from 'playwright';
 import { CONFIG, HOME_URL } from './config.js';
 
 /**
- * AP eProcurement scraper — v3 (performance rewrite).
+ * AP eProcurement scraper (v9).
  *
- * Changes vs v2:
- *  - ONE browser + ONE portal session per cycle: the login → More... →
- *    TenderDetails chain runs once; every search reuses the page by
- *    re-opening Advanced Search with new filters.
- *  - Condition-based waits everywhere (wait for the thing, not a timer):
- *    login readiness, sub-department AJAX, results rows, pagination.
- *  - Junk resources (images/media/fonts) are blocked — the scraper only
- *    needs DOM + scripts. Faster loads, less RAM on the 1 GB server.
+ * Architecture:
+ *  - ONE fresh, isolated browser context PER SEARCH (own cookies/session/
+ *    anti-tamper tokens). Shared sessions leaked #subDeptId between searches
+ *    and re-navigating a live session made the portal bounce Apply to
+ *    SessionTimeOut — both are structurally impossible now.
+ *  - Results stream from an async generator; each is fully processed by the
+ *    caller before the next search starts (sequential, not concurrent).
+ *  - Condition-based waits only; images/media/fonts blocked.
  *
- * Proven portal mechanics preserved unchanged:
+ * Correctness guards (all fail closed, none assume portal behaviour that
+ * field runs disproved):
+ *  - POST body asserted against config's numeric deptId/subDeptId.
+ *  - Columns located by HEADER text; required headers must map exactly once.
+ *  - Pagination pages until Next disables, deduping by ID; conflicting
+ *    duplicates refuse. Completeness is reported as `integrity`:
+ *    'verified' when the DataTables count (page.info() API, else tolerant
+ *    text parse) matches what we collected, else 'best-effort' — the caller
+ *    suppresses withdrawal sweeps for 'best-effort' so unread pages can
+ *    never be mistaken for withdrawn tenders.
+ *  - Transient failures (navigation, session timeout, AJAX, browser death,
+ *    Playwright timeouts) get ONE retry in a fresh context; config/schema
+ *    errors (dept not found, ambiguous match, header changes) never retry.
+ *
+ * Proven portal mechanics that must not be "simplified":
  *  - Session must be minted on login.html; deep links bounce.
- *  - Navigation to TenderDetails = the portal's own More... handler:
- *      loginForm.hdnType="current"; temp(tempName,'loginForm'); POST.
- *  - Apply = advsearchBtn() invoked DIRECTLY (duplicate id="searchTender"
- *    makes clicking-by-id hit the wrong button) → full page reload.
- *  - Results live in the #pagetable13 DataTables grid.
+ *  - Navigation replicates the portal's own More... handler
+ *    (loginForm.hdnType='current'; temp(tempName,'loginForm'); POST).
+ *  - Apply = advsearchBtn() invoked DIRECTLY (Search and Apply share a
+ *    duplicate id="searchTender").
+ *  - Drive the portal only the way its own UI does: synthetic DOM surgery or
+ *    calling its AJAX helpers with wrong args makes the anti-tamper backend
+ *    invalidate the session server-side.
  */
 
 // ------------------------- utilities -------------------------
@@ -201,9 +217,17 @@ async function getReportedTotal(page) {
         const n = parse(el?.textContent);
         if (Number.isInteger(n)) return n;
       }
-      for (const el of document.querySelectorAll('div, span, td, p')) {
-        const n = parse(el.textContent);
-        if (Number.isInteger(n)) return n;
+      // Restrict the text fallback to the table's DataTables wrapper so an
+      // unrelated "Total: 15" elsewhere on the page can't be mistaken for the
+      // result count.
+      const wrapper =
+        document.querySelector('#pagetable13_wrapper') ||
+        document.querySelector('#pagetable13')?.closest('.dataTables_wrapper');
+      if (wrapper) {
+        for (const el of wrapper.querySelectorAll('div, span, td, p')) {
+          const n = parse(el.textContent);
+          if (Number.isInteger(n)) return n;
+        }
       }
       return null;
     })
@@ -349,6 +373,9 @@ async function collectAllPages(page, maxPages = 50) {
           true
         );
       }
+      // 'verified' only when the portal's own count confirmed completeness;
+      // otherwise 'best-effort' (paged until Next disabled, but unconfirmed).
+      all._integrity = Number.isInteger(reportedTotal) ? 'verified' : 'best-effort';
       return all;
     }
 
@@ -535,7 +562,15 @@ async function selectInSelect(page, selector, optionText) {
       },
       { selector, target: norm(optionText) }
     )
-    .catch(() => ({ status: 'missing', matches: [] }));
+    .catch((e) => {
+      // A destroyed execution context / browser comms error / navigation race
+      // is NOT "option absent" — reporting it as missing turned a retryable
+      // glitch into a permanent "Department not found". Rethrow as transient.
+      throw scrapeError(
+        `dropdown evaluation failed for ${selector}: ${e.message}`,
+        true
+      );
+    });
 
   if (result.status === 'ambiguous') {
     // A portal label change must fail loudly, never silently pick option #1.
@@ -587,9 +622,9 @@ async function setFilters(page, search) {
       `${tag}-selects.json`,
       JSON.stringify(await describeSelects(page), null, 2)
     );
-    throw new Error(
+    throw scrapeError(
       `Department "${search.department}" not found — see debug/${tag}-selects.json for available options.`
-    );
+    ); // permanent: config/portal-schema mismatch, retrying can't help
   }
   console.log(`[${tag}] department set: ${deptLabel}`);
 
@@ -619,17 +654,32 @@ async function setFilters(page, search) {
         `${tag}-selects.json`,
         JSON.stringify(await describeSelects(page), null, 2)
       );
-      // HARD FAIL — a department-only fallback would alert unrelated
-      // tenders (silent wrongness). Failing feeds the health monitor.
-      throw new Error(
-        `Sub-department "${search.subDepartment}" never appeared in #subDeptId — ` +
-          `see debug/${tag}-selects.json for available options.`
+      // Distinguish a SLOW/FAILED getCircles() AJAX (transient — worth one
+      // fresh-context retry) from a genuinely populated list that simply
+      // lacks our configured label (permanent config/portal-schema error).
+      let optionCount = null;
+      try {
+        optionCount = await page.evaluate(
+          () => document.querySelector('#subDeptId')?.options.length ?? null
+        );
+      } catch {
+        optionCount = null; // couldn't even evaluate — treat as transient below
+      }
+      const listNeverLoaded = optionCount === null || optionCount <= 1;
+      // HARD FAIL either way — a department-only fallback would alert
+      // unrelated tenders (silent wrongness). Only retryability differs.
+      throw scrapeError(
+        `Sub-department "${search.subDepartment}" never appeared in #subDeptId ` +
+          `(${optionCount === null ? 'select unreadable' : optionCount + ' option(s) present'}) — ` +
+          `see debug/${tag}-selects.json for available options.`,
+        listNeverLoaded
       );
     }
     const subLabel = await selectInSelect(page, '#subDeptId', search.subDepartment);
     if (!subLabel) {
-      throw new Error(
-        `Sub-department "${search.subDepartment}" appeared but could not be selected.`
+      throw scrapeError(
+        `Sub-department "${search.subDepartment}" appeared but could not be selected.`,
+        true // selection race — a fresh context is worth one attempt
       );
     }
 
@@ -743,7 +793,7 @@ async function applyAndParse(page, search, postCaptures) {
     // Portal is HEALTHY and explicitly reports zero tenders — distinct from
     // a timeout, which is an unhealthy scrape and must not baseline/sweep.
     console.log(`[${tag}] portal reports no matching records (0 tenders).`);
-    return { status: 'empty', tenders: [] };
+    return { status: 'empty', tenders: [], integrity: 'verified' };
   }
   if (state === 'timeout') {
     // Neither rows nor an explicit empty marker: treat as a FAILED scrape so
@@ -751,8 +801,9 @@ async function applyAndParse(page, search, postCaptures) {
     throw scrapeError('results table reached neither rows nor an empty marker in 20s', true);
   }
   const tenders = await collectAllPages(page);
+  const integrity = tenders._integrity || 'best-effort';
   console.log(`[${tag}] extracted ${tenders.length} tenders from results table`);
-  return { status: 'ok', tenders };
+  return { status: 'ok', tenders, integrity };
 }
 
 // ------------------------- public API -------------------------
@@ -856,16 +907,19 @@ export async function* scrapeSearchesStream(searches) {
         const browserDied = /target closed|browser has been closed|connection closed/i.test(
           e.message || ''
         );
-        if (!e.transient && !browserDied) throw e;
+        // Playwright TimeoutError is retryable by nature: it reports slowness,
+        // never a wrong configuration.
+        const timedOut = e.name === 'TimeoutError';
+        if (!e.transient && !browserDied && !timedOut) throw e;
         console.warn(`[${search.id}] transient failure (${e.message}) — retrying with fresh context…`);
         await ensureBrowser(); // relaunch BEFORE the retry, or it dies in the dead browser
         outcome = await attemptSearch(search, []);
       }
-      const { status, tenders } = outcome;
+      const { status, tenders, integrity } = outcome;
       console.log(
         `[${search.id}] search completed in ${((Date.now() - started) / 1000).toFixed(1)}s`
       );
-      result = { search, status, tenders, error: null };
+      result = { search, status, tenders, integrity: integrity || 'best-effort', error: null };
     } catch (e) {
       console.error(`[${search.id}] scrape failed: ${e.message}`);
       result = { search, status: 'error', tenders: [], error: e.message };

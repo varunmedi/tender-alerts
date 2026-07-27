@@ -64,11 +64,14 @@ export const SEARCHES = [
 ];
 
 export const PORTAL_URL =
+  process.env.PORTAL_URL ||
   'https://tender.apeprocurement.gov.in/TenderDetailsHome.html';
 
 /** Landing page visited FIRST to establish a session — the portal
- *  redirects deep links to SessionTimeOut.jsp without this. */
-export const HOME_URL = 'https://tender.apeprocurement.gov.in/login.html';
+ *  redirects deep links to SessionTimeOut.jsp without this.
+ *  Overridable via HOME_URL so tests can point at an unreachable host. */
+export const HOME_URL =
+  process.env.HOME_URL || 'https://tender.apeprocurement.gov.in/login.html';
 
 export const CONFIG = {
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN,
@@ -96,12 +99,21 @@ export const CONFIG = {
   // old alerts instead. NOTE: deleting messages older than 48h requires the
   // bot to be a GROUP ADMIN with the "Delete messages" permission.
   deleteWithdrawnAlerts: process.env.DELETE_WITHDRAWN_ALERTS !== '0',
+  // What to do when data/seen.json is corrupt/unparseable:
+  //   'recover' (default) — back it up, start fresh, warn the group. Keeps an
+  //     UNATTENDED bot alerting; costs one silent re-baseline cycle.
+  //   'halt' — refuse to start (exit 1). Safest against missed alerts, but a
+  //     2am corruption means ZERO alerts until someone notices.
+  // Recovery is the default deliberately: with reliable warning delivery
+  // (v9 #1) the operator is told, and availability matters more here.
+  stateCorruptionPolicy:
+    process.env.STATE_CORRUPTION_POLICY === 'halt' ? 'halt' : 'recover',
   seenStorePath:
     process.env.SEEN_STORE_PATH ||
     fileURLToPath(new URL('../data/seen.json', import.meta.url)),
   debugDir: fileURLToPath(new URL('../debug/', import.meta.url)),
   // Playwright timeouts (ms). The portal can be slow — be generous.
-  navTimeout: 60_000,
+  navTimeout: envInt('NAV_TIMEOUT_MS', 60_000),
   actionTimeout: 20_000,
 };
 

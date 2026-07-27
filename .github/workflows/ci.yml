@@ -10,5 +10,11 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: node --check src/index.js && node --check src/scraper.js && node --check src/store.js && node --check src/notifier.js && node --check src/config.js
+      - name: Syntax check
+        run: |
+          for f in src/*.js; do node --check "$f"; done
+      # Chromium is unavailable in the authoring sandbox but IS available here,
+      # so browser-level fixture tests can be added without further setup.
+      - name: Install Chromium for browser tests
+        run: npx playwright install --with-deps chromium
       - run: npm test

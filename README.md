@@ -1,4 +1,4 @@
-# AP Tender Alerts → Telegram — Varun's Ops Guide (v10)
+# AP Tender Alerts → Telegram — Varun's Ops Guide (v11)
 
 Self-hosted bot watching the AP eProcurement portal on an adaptive IST schedule.
 Alerts the **"Tenders"** Telegram group on new (🔔), re-released (🔁), and amended
@@ -7,7 +7,7 @@ Oracle Cloud Always Free (Hyderabad). ₹0/month.
 
 **Production state (verified 25 Jul 2026):** Node 24.18.0 LTS · Playwright 1.61 ·
 per-search isolated sessions · full 4-search cycle ≈ **34s** · POST-verified
-filters · **19-test suite (incl. real child-process integration tests) + CI** · crash/reboot recovery live-verified.
+filters · **22-test suite (incl. real child-process integration tests) + CI** · crash/reboot recovery live-verified.
 
 ## Tech stack
 
@@ -124,7 +124,7 @@ Search outcomes are reported in three buckets:
 | Bucket | Meaning |
 |---|---|
 | **ok** | Scraped and fully processed; completeness verified (or portal-confirmed empty) |
-| **degraded** | Scraped fine, but completeness UNVERIFIED — new tenders still alerted; withdrawal sweep, first-run baseline, and alert cleanup all suppressed |
+| **degraded** | Scraped fine, but completeness UNVERIFIED — new tenders still alerted; withdrawal sweep, first-run baseline, and alert cleanup all suppressed. Mutually exclusive with `ok` |
 | **failed** | Scrape or processing error; nothing aged, nothing baselined |
 
 Three consecutive `degraded` cycles for a search send a ⚠️ (with a ✅ when
@@ -373,3 +373,33 @@ test/*.test.js    node:test suite (9)
   is absent (Windows/macOS dev). Summary line gains a `degraded` count. Tests:
   19, including regression guards for the undefined-identifier bug and the
   policy-typo coercion. Documented the at-least-once delivery guarantee.
+- **v11 (27 Jul) — State & Shutdown Integrity (review 8).** **Degraded searches
+  were double-counted:** v10 incremented `degraded` AND `successful` for the
+  same search (4 searches could report "4 ok, 1 degraded"), and counted
+  success BEFORE `trackHealth()` so a persistence throw counted it as
+  successful and failed. Classification is now mutually exclusive and happens
+  only after every persistence step. **Shutdown could release the lock while
+  scraping continued:** if the 80s deadline won the race, the lock was freed
+  with the browser still open — PM2 or a manual run could then start a second
+  bot writing state and sending alerts concurrently. The deadline is now
+  cancellable (an uncancelled `pause()` timer also kept the event loop alive
+  for the full 80s) and on timeout the lock is HELD while we await PM2
+  termination. **Integrity warnings got the same reliable state machine as
+  scrape health** (none → warning-pending → warned → recovery-pending): v10
+  cleared `warned` before sending, so a failed ✅ was lost forever; integrity
+  persistence failures are no longer swallowed. **Primitive JSON state roots
+  rejected** — `42`, `"text"`, `true` parse as valid JSON and would silently
+  produce a fresh store (wiping baselines, suppressing alerts); non-integer
+  `version` likewise. `status.json`'s integrity section is now validated
+  instead of silently normalised away. **Composite pagination marker** —
+  advancement now checks the DataTables API page index first, then info text,
+  then a first-rows signature, so a successful advance is no longer mistaken
+  for failure when the optional info element is absent or unrepainted.
+  Strict boolean env parsing (`ADAPTIVE_SCHEDULE=false` previously stayed
+  ENABLED because only the literal "0" disabled it; typos now fail startup).
+  22 tests, adding guards for primitive roots and boolean coercion.
+  DEFERRED again, with the same rationale: Playwright fixture tests — CI can
+  install Chromium, but I cannot execute them in the authoring sandbox, and
+  shipping unverifiable test code is worse than shipping none.
+  Repo actions still yours: regenerate/commit `package-lock.json`, push CI
+  workflow + README, rotate credentials.

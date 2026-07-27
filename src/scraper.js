@@ -337,18 +337,32 @@ async function collectAllPages(page, maxPages = 50) {
       }
     }
 
-    // Advance-detection via the DataTables info text ("Showing 11 to 20 of
-    // 27 entries") — robust against two pages starting with the same ID and
-    // free of any hardcoded column position.
-    let previousInfo;
+    // COMPOSITE advance marker: DataTables API page index (strongest) →
+    // visible info text → first-rows signature. Relying on the info element
+    // alone meant a successful advance looked like a failure whenever that
+    // optional element was absent, renamed, or not repainted.
+    let previousMarker;
     try {
-      // A missing info element legitimately yields null (advisory count);
-      // only an evaluation FAILURE throws.
-      previousInfo = await page.evaluate(
-        () => document.querySelector('#pagetable13_info')?.textContent.trim() ?? null
-      );
+      previousMarker = await page.evaluate(() => {
+      const jq = window.jQuery || window.$;
+      try {
+        if (jq?.fn?.dataTable?.isDataTable('#pagetable13')) {
+          const i = jq('#pagetable13').DataTable().page.info();
+          return `api:${i.page}:${i.start}:${i.end}`;
+        }
+      } catch {
+        /* fall through to DOM markers */
+      }
+      const infoText =
+        document.querySelector('#pagetable13_info')?.textContent?.trim() || '';
+      const rowSignature = [...document.querySelectorAll('#pagetable13 tbody tr')]
+        .slice(0, 3)
+        .map((r) => r.textContent.trim())
+        .join('|');
+      return `dom:${infoText}::${rowSignature}`;
+      });
     } catch (e) {
-      throw scrapeError(`pagination info evaluation failed: ${e.message}`, true);
+      throw scrapeError(`pagination marker evaluation failed: ${e.message}`, true);
     }
 
     let advanced;
@@ -382,10 +396,24 @@ async function collectAllPages(page, maxPages = 50) {
     const advancedOk = await page
       .waitForFunction(
         (prev) => {
-          const info = document.querySelector('#pagetable13_info');
-          return info && info.textContent.trim() !== prev;
+      const jq = window.jQuery || window.$;
+      try {
+        if (jq?.fn?.dataTable?.isDataTable('#pagetable13')) {
+          const i = jq('#pagetable13').DataTable().page.info();
+          const cur = `api:${i.page}:${i.start}:${i.end}`; return cur !== prev;
+        }
+      } catch {
+        /* fall through to DOM markers */
+      }
+      const infoText =
+        document.querySelector('#pagetable13_info')?.textContent?.trim() || '';
+      const rowSignature = [...document.querySelectorAll('#pagetable13 tbody tr')]
+        .slice(0, 3)
+        .map((r) => r.textContent.trim())
+        .join('|');
+      const cur = `dom:${infoText}::${rowSignature}`; return cur !== prev;
         },
-        previousInfo,
+        previousMarker,
         { timeout: 5000 }
       )
       .then(() => true)

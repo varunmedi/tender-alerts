@@ -55,6 +55,16 @@ function searchIdsFromKeys(tenders) {
 
 function migrate(raw) {
   if (raw == null) return { version: STORE_VERSION, tenders: {}, retired: {}, searches: [] };
+
+  // A primitive root (42, "text", true) is valid JSON but not a store.
+  // Without this, raw.tenders is undefined and migration would silently
+  // build a FRESH store — re-baselining every search and suppressing alerts.
+  if (typeof raw !== 'object') {
+    throw new Error(`state root must be an object or legacy array; received ${typeof raw}`);
+  }
+  if (Object.hasOwn(raw, 'version') && !Number.isInteger(raw.version)) {
+    throw new Error(`state version must be an integer; received ${JSON.stringify(raw.version)}`);
+  }
   // Refuse FUTURE versions: an older deployment must never rewrite a newer
   // state file and silently drop fields it doesn't understand.
   if (Number.isInteger(raw.version) && raw.version > STORE_VERSION) {

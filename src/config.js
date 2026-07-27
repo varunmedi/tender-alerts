@@ -25,6 +25,18 @@ function envEnum(name, fallback, allowed) {
   return value;
 }
 
+function envBool(name, fallback) {
+  const raw = process.env[name];
+  if (raw == null || raw === '') return fallback;
+  const v = raw.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(v)) return true;
+  if (['0', 'false', 'no', 'off'].includes(v)) return false;
+  // Previously only the literal "0" disabled these, so ADAPTIVE_SCHEDULE=false
+  // silently stayed ENABLED. A typo must fail startup, not flip behaviour.
+  envErrors.push(`${name}="${raw}" must be true/false or 1/0`);
+  return fallback;
+}
+
 export function getEnvErrors() {
   return envErrors;
 }
@@ -99,7 +111,7 @@ export const CONFIG = {
   activeIntervalMin: envInt('ACTIVE_INTERVAL_MINUTES', 15),
   quietIntervalMin: envInt('QUIET_INTERVAL_MINUTES', 60),
   // Legacy fallback (used if ADAPTIVE_SCHEDULE=0 in .env)
-  adaptiveSchedule: process.env.ADAPTIVE_SCHEDULE !== '0',
+  adaptiveSchedule: envBool('ADAPTIVE_SCHEDULE', true),
   pollIntervalMinutes: envInt('POLL_INTERVAL_MINUTES', 45),
   // --debug flag works on Windows/Mac/Linux; env var kept for compatibility
   // --debug: extra artifacts (screenshots/dumps), still headless — server-safe.
@@ -111,7 +123,7 @@ export const CONFIG = {
   // only shows live tenders. Set DELETE_WITHDRAWN_ALERTS=0 in .env to keep
   // old alerts instead. NOTE: deleting messages older than 48h requires the
   // bot to be a GROUP ADMIN with the "Delete messages" permission.
-  deleteWithdrawnAlerts: process.env.DELETE_WITHDRAWN_ALERTS !== '0',
+  deleteWithdrawnAlerts: envBool('DELETE_WITHDRAWN_ALERTS', true),
   // What to do when data/seen.json is corrupt/unparseable:
   //   'recover' (default) — back it up, start fresh, warn the group. Keeps an
   //     UNATTENDED bot alerting; costs one silent re-baseline cycle.

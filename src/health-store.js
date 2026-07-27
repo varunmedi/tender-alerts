@@ -32,7 +32,34 @@ function isIso(v) {
   return typeof v === 'string' && Number.isFinite(Date.parse(v));
 }
 
+/** The integrity section was previously unvalidated: a malformed entry
+ *  passed health-store validation and was then silently normalised away,
+ *  quietly losing degradation tracking. */
+function validateIntegrity(integrity) {
+  if (integrity == null) return;
+  if (typeof integrity !== 'object' || Array.isArray(integrity)) {
+    throw new Error('integrity is not an object');
+  }
+  for (const [id, entry] of Object.entries(integrity)) {
+    if (!entry || typeof entry !== 'object') {
+      throw new Error(`integrity[${id}] is not an object`);
+    }
+    if (!Number.isInteger(entry.consecutiveBestEffort) || entry.consecutiveBestEffort < 0) {
+      throw new Error(`integrity[${id}].consecutiveBestEffort invalid`);
+    }
+    if (entry.notification != null && !Object.values(NOTIFY).includes(entry.notification)) {
+      throw new Error(`integrity[${id}].notification invalid`);
+    }
+    for (const f of ['lastVerifiedAt', 'lastBestEffortAt']) {
+      if (entry[f] != null && !isIso(entry[f])) {
+        throw new Error(`integrity[${id}].${f} invalid`);
+      }
+    }
+  }
+}
+
 function validate(status) {
+  validateIntegrity(status.integrity);
   if (!status || typeof status !== 'object' || Array.isArray(status)) {
     throw new Error('status root is not an object');
   }

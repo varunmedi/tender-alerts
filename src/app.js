@@ -154,7 +154,9 @@ function loadIntegrityState() {
         streak: Number.isInteger(h.consecutiveBestEffort) ? h.consecutiveBestEffort : 0,
         lastVerifiedAt: h.lastVerifiedAt || null,
         lastBestEffortAt: h.lastBestEffortAt || null,
-        warned: !!h.warned,
+        notification: Object.values(NOTIFY).includes(h.notification)
+          ? h.notification
+          : NOTIFY.NONE,
       };
     }
     return out;
@@ -170,14 +172,13 @@ function persistIntegrityState() {
       consecutiveBestEffort: st.streak,
       lastVerifiedAt: st.lastVerifiedAt,
       lastBestEffortAt: st.lastBestEffortAt,
-      warned: st.warned,
+      notification: st.notification,
     };
   }
-  try {
-    writeHeartbeat({ integrity });
-  } catch (e) {
-    console.error(`[health] could not persist integrity state: ${e.message}`);
-  }
+  // Deliberately NOT caught: writeHeartbeat throws so persisted intent is
+  // never falsely assumed. A caller that can't record "warning-pending"
+  // must not proceed to send as if it had.
+  writeHeartbeat({ integrity });
 }
 
 /** verified === true resets the streak (and sends ✅ if we had warned). */
@@ -185,21 +186,39 @@ async function trackIntegrity(search, verified) {
   const st =
     integrityState[search.id] ||
     (integrityState[search.id] = {
-      streak: 0, lastVerifiedAt: null, lastBestEffortAt: null, warned: false,
+      streak: 0, lastVerifiedAt: null, lastBestEffortAt: null, notification: NOTIFY.NONE,
     });
 
   if (verified) {
     st.lastVerifiedAt = new Date().toISOString();
-    const wasWarned = st.warned;
-    st.streak = 0;
-    st.warned = false;
-    persistIntegrityState();
-    if (wasWarned) {
-      await tryNotifyHealth(
-        `✅ <b>Completeness restored</b> — "${esc(search.label)}" results are ` +
-          'fully verified again; withdrawal tracking has resumed.'
-      );
+
+    // Warning never reached Telegram → cancel silently (no ✅ for a ⚠️
+    // nobody saw), mirroring the scrape-health machine.
+    if (st.notification === NOTIFY.WARNING_PENDING) {
+      st.streak = 0;
+      st.notification = NOTIFY.NONE;
+      persistIntegrityState();
+      return;
     }
+
+    const owesRecovery =
+      st.notification === NOTIFY.WARNED || st.notification === NOTIFY.RECOVERY_PENDING;
+    st.streak = 0;
+    if (!owesRecovery) {
+      st.notification = NOTIFY.NONE;
+      persistIntegrityState();
+      return;
+    }
+    // Mark intent BEFORE sending; clear only on confirmed delivery so a
+    // failed ✅ is retried next verified cycle instead of being lost.
+    st.notification = NOTIFY.RECOVERY_PENDING;
+    persistIntegrityState();
+    const delivered = await tryNotifyHealth(
+      `✅ <b>Completeness restored</b> — "${esc(search.label)}" results are ` +
+        'fully verified again; withdrawal tracking has resumed.'
+    );
+    if (delivered) st.notification = NOTIFY.NONE;
+    persistIntegrityState();
     return;
   }
 
@@ -207,7 +226,13 @@ async function trackIntegrity(search, verified) {
   st.lastBestEffortAt = new Date().toISOString();
   persistIntegrityState();
   console.warn(`[${search.id}] best-effort streak: ${st.streak}`);
-  if (st.streak >= BEST_EFFORT_WARN_AT && !st.warned) {
+
+  const needsWarning =
+    st.streak >= BEST_EFFORT_WARN_AT &&
+    (st.notification === NOTIFY.NONE || st.notification === NOTIFY.WARNING_PENDING);
+  if (needsWarning) {
+    st.notification = NOTIFY.WARNING_PENDING;
+    persistIntegrityState();
     const delivered = await tryNotifyHealth(
       `⚠️ <b>Tender bot — degraded completeness</b>\n` +
         `"${esc(search.label)}" has returned unverifiable result counts for ` +
@@ -217,10 +242,8 @@ async function trackIntegrity(search, verified) {
         `confirmed again. Likely a portal markup change — check: ` +
         `pm2 logs tender-alerts --lines 50 --nostream`
     );
-    if (delivered) {
-      st.warned = true;
-      persistIntegrityState();
-    }
+    if (delivered) st.notification = NOTIFY.WARNED;
+    persistIntegrityState();
   }
 }
 
@@ -493,7 +516,6 @@ async function processSearchResult({ search, status, tenders, error, integrity }
       );
     }
     await trackIntegrity(search, false);
-    summary.degraded++;
   }
 
   // Withdrawn-alert cleanup: delete (<47h) or edit to ❌ tombstone; retried
@@ -568,8 +590,14 @@ async function processSearchResult({ search, status, tenders, error, integrity }
   // all persisted. A search whose lifecycle processing throws is counted
   // failed by the caller's isolation handler, never double-counted, and no
   // premature ✅ recovery can fire before its state is actually safe.
-  summary.successful++;
+  // Classification is MUTUALLY EXCLUSIVE and happens only after every
+  // persistence step (sweep, baseline, cleanup, health) has succeeded. v10
+  // incremented `degraded` earlier AND `successful` here, so one search could
+  // report as both; and counting before trackHealth() meant a persistence
+  // throw counted it as successful AND failed.
   await trackHealth(search, true, null, tenders.length);
+  if (complete) summary.successful++;
+  else summary.degraded++;
   console.log(`[${search.id}] done. ${tenders.length} tenders found, ${newCount} alert(s) sent.`);
 }
 
@@ -597,21 +625,50 @@ let loopTimer = null;
  * window; we self-cap below it.
  */
 function installGracefulShutdown() {
+  /** Race the cycle against a CANCELLABLE deadline. */
+  async function waitForCycleOrDeadline(cycle, timeoutMs) {
+    let timer;
+    const deadline = new Promise((resolve) => {
+      timer = setTimeout(() => resolve('timeout'), timeoutMs);
+    });
+    try {
+      return await Promise.race([
+        cycle.then(() => 'completed', () => 'completed'),
+        deadline,
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   const shutdown = async (signal) => {
     if (stopping) return;
     stopping = true;
     console.log(`${signal} received — finishing active work before exit…`);
     if (loopTimer) clearTimeout(loopTimer);
-    if (activeCycle) {
-      await Promise.race([
-        activeCycle.catch(() => {}),
-        pause(80_000), // hard cap, safely under PM2 kill_timeout (90s)
-      ]);
+    // Clearable deadline: an un-cancelled pause() timer would keep the event
+    // loop alive for the full 80s even after the cycle finished early.
+    const outcome = activeCycle
+      ? await waitForCycleOrDeadline(activeCycle, 80_000)
+      : 'completed';
+
+    if (outcome === 'timeout') {
+      // CRITICAL: the cycle is STILL RUNNING (browser open, state writes in
+      // flight). Releasing the lock here would let PM2 or a manual run start
+      // a second bot that writes lifecycle state and sends alerts
+      // concurrently. Hold the lock and let PM2's kill_timeout terminate us.
+      console.error(
+        'shutdown deadline reached while a cycle is still active — ' +
+          'holding the process lock and awaiting termination by PM2.'
+      );
+      process.exitCode = 1;
+      return;
     }
+
     releaseLock();
     // No process.exit(): with timers cleared and Chromium closed the event
-    // loop drains on its own. Forcing exit here is what could still cut a
-    // final state write. (A stuck cycle is bounded by the deadline above.)
+    // loop drains on its own. Forcing exit is what could still cut a final
+    // state write.
     process.exitCode = 0;
   };
   process.on('SIGINT', () => void shutdown('SIGINT'));

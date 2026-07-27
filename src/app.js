@@ -76,13 +76,26 @@ function acquireLock() {
   } catch {
     /* unreadable owner: treat as stale */
   }
+  // Liveness: on Linux prefer PID + kernel start-time (defeats PID reuse).
+  // Elsewhere (/proc absent — Windows/macOS dev machines) fall back to a
+  // plain existence probe, which is better than treating a LIVE process as
+  // stale and stealing its lock.
+  const processExists = (pid) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch (e) {
+      return e.code === 'EPERM'; // exists but not ours to signal
+    }
+  };
   let alive = false;
   if (owner?.pid) {
-    const now = procStartTime(owner.pid);
-    // Alive = process exists AND is the SAME process that took the lock
-    // (matching start time defeats PID reuse; missing recorded start time
-    // falls back to plain existence for older owner files).
-    alive = now !== null && (!owner.startTime || now === owner.startTime);
+    const currentStart = procStartTime(owner.pid);
+    if (currentStart !== null && owner.startTime) {
+      alive = currentStart === owner.startTime;
+    } else {
+      alive = processExists(owner.pid);
+    }
   }
   if (alive) {
     console.error(
@@ -124,7 +137,92 @@ let lastSuccessfulCycleAt = initialStatus.lastSuccessfulCycleAt ?? null;
 
 const FAIL_NOTIFY_AT = 6;
 const failState = hydrateFailState(initialStatus);
-const bestEffortStreak = {}; // consecutive unverified cycles per search
+// Integrity health is tracked SEPARATELY from scrape health and PERSISTED:
+// a search stuck in best-effort keeps alerting new tenders (so the normal
+// health tracker sees it as fine) while withdrawals/cleanup stay silently
+// disabled. Without this, a portal change could disable lifecycle
+// completeness indefinitely with nothing but a log line.
+const BEST_EFFORT_WARN_AT = 3;
+const integrityState = loadIntegrityState();
+
+function loadIntegrityState() {
+  try {
+    const cur = loadStatus();
+    const out = {};
+    for (const [id, h] of Object.entries(cur.integrity || {})) {
+      out[id] = {
+        streak: Number.isInteger(h.consecutiveBestEffort) ? h.consecutiveBestEffort : 0,
+        lastVerifiedAt: h.lastVerifiedAt || null,
+        lastBestEffortAt: h.lastBestEffortAt || null,
+        warned: !!h.warned,
+      };
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function persistIntegrityState() {
+  const integrity = {};
+  for (const [id, st] of Object.entries(integrityState)) {
+    integrity[id] = {
+      consecutiveBestEffort: st.streak,
+      lastVerifiedAt: st.lastVerifiedAt,
+      lastBestEffortAt: st.lastBestEffortAt,
+      warned: st.warned,
+    };
+  }
+  try {
+    writeHeartbeat({ integrity });
+  } catch (e) {
+    console.error(`[health] could not persist integrity state: ${e.message}`);
+  }
+}
+
+/** verified === true resets the streak (and sends ✅ if we had warned). */
+async function trackIntegrity(search, verified) {
+  const st =
+    integrityState[search.id] ||
+    (integrityState[search.id] = {
+      streak: 0, lastVerifiedAt: null, lastBestEffortAt: null, warned: false,
+    });
+
+  if (verified) {
+    st.lastVerifiedAt = new Date().toISOString();
+    const wasWarned = st.warned;
+    st.streak = 0;
+    st.warned = false;
+    persistIntegrityState();
+    if (wasWarned) {
+      await tryNotifyHealth(
+        `✅ <b>Completeness restored</b> — "${esc(search.label)}" results are ` +
+          'fully verified again; withdrawal tracking has resumed.'
+      );
+    }
+    return;
+  }
+
+  st.streak += 1;
+  st.lastBestEffortAt = new Date().toISOString();
+  persistIntegrityState();
+  console.warn(`[${search.id}] best-effort streak: ${st.streak}`);
+  if (st.streak >= BEST_EFFORT_WARN_AT && !st.warned) {
+    const delivered = await tryNotifyHealth(
+      `⚠️ <b>Tender bot — degraded completeness</b>\n` +
+        `"${esc(search.label)}" has returned unverifiable result counts for ` +
+        `${st.streak} consecutive checks.\n\n` +
+        `New tenders are STILL being alerted, but withdrawal detection and ` +
+        `alert cleanup are suspended for this search until completeness is ` +
+        `confirmed again. Likely a portal markup change — check: ` +
+        `pm2 logs tender-alerts --lines 50 --nostream`
+    );
+    if (delivered) {
+      st.warned = true;
+      persistIntegrityState();
+    }
+  }
+}
 
 if (healthLoadWarning) {
   // surfaced to the group by main() alongside any store warning
@@ -174,14 +272,29 @@ async function trackHealth(search, ok, detail, tenderCount = null) {
     (failState[search.id] = { count: 0, firstAt: null, notification: NOTIFY.NONE });
 
   if (ok) {
-    const wasWarned =
-      st.notification === NOTIFY.WARNED ||
-      st.notification === NOTIFY.WARNING_PENDING ||
-      st.notification === NOTIFY.RECOVERY_PENDING;
     st.lastSuccessAt = new Date().toISOString();
     st.lastTenderCount = tenderCount;
     st.lastError = null;
-    if (wasWarned) {
+
+    // WARNING_PENDING means the ⚠️ never reached Telegram. Users saw nothing,
+    // so a "✅ recovered" would be nonsense — cancel the pending warning
+    // silently instead.
+    if (st.notification === NOTIFY.WARNING_PENDING) {
+      st.count = 0;
+      st.firstAt = null;
+      st.notification = NOTIFY.NONE;
+      persistHealthState();
+      console.log(
+        `[${search.id}] recovered before the pending warning was delivered — ` +
+          'warning cancelled, no recovery notice sent.'
+      );
+      return;
+    }
+
+    // Users DID see a warning (or a recovery we still owe them).
+    const owesRecovery =
+      st.notification === NOTIFY.WARNED || st.notification === NOTIFY.RECOVERY_PENDING;
+    if (owesRecovery) {
       st.notification = NOTIFY.RECOVERY_PENDING;
       persistHealthState();
       const delivered = await tryNotifyHealth(
@@ -356,21 +469,45 @@ async function processSearchResult({ search, status, tenders, error, integrity }
   // the portal's own count was unavailable) still ALERTS positively-observed
   // tenders, but must NOT drive withdrawals — an unread page could otherwise
   // look like a batch of vanished tenders and trigger false retirements.
-  if (status === 'empty' || integrity === 'verified') {
+  // ONE completeness flag drives every destructive/irreversible lifecycle
+  // action. 'empty' is portal-CONFIRMED completeness; 'verified' means the
+  // portal's own count matched what we collected.
+  const complete = status === 'empty' || integrity === 'verified';
+
+  if (complete) {
     sweepMissing(search.id, currentKeys, true);
+    // Baseline ONLY on a complete first run. Marking a partial first scrape
+    // as "known" would make tenders on the unread pages look brand-new later
+    // and announce pre-existing tenders as newly published.
+    markSearchKnown(search.id);
+    await trackIntegrity(search, true);
   } else {
-    bestEffortStreak[search.id] = (bestEffortStreak[search.id] || 0) + 1;
     console.warn(
-      `[${search.id}] completeness unverified (best-effort #${bestEffortStreak[search.id]}) — ` +
-        'alerting observed tenders, withdrawal sweep SUPPRESSED this cycle.'
+      `[${search.id}] completeness unverified — alerting observed tenders; ` +
+        'withdrawal sweep, baseline, and alert cleanup all SUPPRESSED this cycle.'
     );
+    if (isFirstRunFor(search.id)) {
+      console.warn(
+        `[${search.id}] first-run baseline remains INCOMPLETE — search stays in ` +
+          'first-run mode until one verified (or explicitly empty) scrape completes.'
+      );
+    }
+    await trackIntegrity(search, false);
+    summary.degraded++;
   }
-  if (status === 'empty' || integrity === 'verified') bestEffortStreak[search.id] = 0;
-  markSearchKnown(search.id);
 
   // Withdrawn-alert cleanup: delete (<47h) or edit to ❌ tombstone; retried
-  // across cycles; idempotent against "not found"/"not modified" (#9).
-  if (CONFIG.deleteWithdrawnAlerts) {
+  // across cycles; idempotent against "not found"/"not modified".
+  // Gated on `complete` for the same reason as the sweep: a re-released
+  // tender sitting on an unread page would otherwise be tombstoned while
+  // it is actually live. The currentKeys guard only protects tenders we
+  // positively observed, which a partial result cannot guarantee.
+  if (!complete && CONFIG.deleteWithdrawnAlerts) {
+    console.warn(
+      `[${search.id}] retirement cleanup suppressed — result completeness unverified.`
+    );
+  }
+  if (complete && CONFIG.deleteWithdrawnAlerts) {
     for (const r of getPendingRetirements(search.id)) {
       // RACE GUARD (#5): a re-released tender whose 🔁 send failed is still
       // in `retired` — but it's LIVE on the portal. Never clean up its alert.
@@ -407,10 +544,21 @@ async function processSearchResult({ search, status, tenders, error, integrity }
       }
       const outcome = markRetirementNotified(r.key, success);
       if (outcome === 'gave-up') {
-        await notifyHealth(
+        // BUG FIX: this called an undefined notifyHealth() and threw a
+        // ReferenceError instead of warning. Also: the entry is already
+        // marked 'failed', so if this send fails the warning is gone — log
+        // loudly so the operator can still find it in pm2 logs.
+        const delivered = await tryNotifyHealth(
           `⚠️ <b>Tender bot</b>: could not clean up the group alert for withdrawn ` +
-            `tender <code>${tenderId}</code> after repeated attempts (marked notify:"failed" in state).`
+            `tender <code>${esc(tenderId)}</code> after repeated attempts ` +
+            `(marked notify:"failed" in state).`
         );
+        if (!delivered) {
+          console.error(
+            `[${search.id}] FAILED to deliver cleanup-gave-up warning for ${r.key} — ` +
+              'this notification is not retried; see notify:"failed" in data/seen.json.'
+          );
+        }
       }
       await pause(1200);
     }
@@ -457,18 +605,21 @@ function installGracefulShutdown() {
     if (activeCycle) {
       await Promise.race([
         activeCycle.catch(() => {}),
-        pause(25_000), // hard cap, safely under PM2 kill_timeout
+        pause(80_000), // hard cap, safely under PM2 kill_timeout (90s)
       ]);
     }
     releaseLock();
-    process.exit(0);
+    // No process.exit(): with timers cleared and Chromium closed the event
+    // loop drains on its own. Forcing exit here is what could still cut a
+    // final state write. (A stuck cycle is bounded by the deadline above.)
+    process.exitCode = 0;
   };
   process.on('SIGINT', () => void shutdown('SIGINT'));
   process.on('SIGTERM', () => void shutdown('SIGTERM'));
 }
 
 async function runOnce() {
-  const summary = { successful: 0, failed: 0, alertsSent: 0 };
+  const summary = { successful: 0, degraded: 0, failed: 0, alertsSent: 0 };
   if (cycleRunning) {
     console.warn('previous check still running — skipping this tick.');
     return summary;
@@ -511,6 +662,15 @@ async function runSearches(summary) {
         await trackHealth(result.search, false, `processing error: ${e.message}`.slice(0, 300));
       }
       processed.add(result.search.id);
+      if (stopping) {
+        // Finish the search in flight (its state is now persisted), then stop.
+        // Waiting for the whole cycle risked exceeding the shutdown deadline
+        // and being killed mid-Telegram-send.
+        console.log(
+          'shutdown requested — current search completed; remaining searches skipped.'
+        );
+        break;
+      }
     }
   } catch (e) {
     console.error(`cycle failed: ${e.message}`);
@@ -561,8 +721,8 @@ export async function main() {
   if (process.argv.includes('--once')) {
     const summary = await runOnce();
     console.log(
-      `Single run complete: ${summary.successful} ok, ${summary.failed} failed, ` +
-        `${summary.alertsSent} alert(s) sent.`
+      `Single run complete: ${summary.successful} ok, ${summary.degraded} degraded, ` +
+        `${summary.failed} failed, ${summary.alertsSent} alert(s) sent.`
     );
     if (summary.failed > 0) process.exitCode = 1; // machine-checkable outcome
     return;

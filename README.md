@@ -1,4 +1,4 @@
-# AP Tender Alerts → Telegram — Varun's Ops Guide (v9.1)
+# AP Tender Alerts → Telegram — Varun's Ops Guide (v10)
 
 Self-hosted bot watching the AP eProcurement portal on an adaptive IST schedule.
 Alerts the **"Tenders"** Telegram group on new (🔔), re-released (🔁), and amended
@@ -7,7 +7,7 @@ Oracle Cloud Always Free (Hyderabad). ₹0/month.
 
 **Production state (verified 25 Jul 2026):** Node 24.18.0 LTS · Playwright 1.61 ·
 per-search isolated sessions · full 4-search cycle ≈ **34s** · POST-verified
-filters · **17-test suite (incl. real child-process integration tests) + CI** · crash/reboot recovery live-verified.
+filters · **19-test suite (incl. real child-process integration tests) + CI** · crash/reboot recovery live-verified.
 
 ## Tech stack
 
@@ -109,6 +109,27 @@ SessionTimeOut.jsp.
 - Tune in `.env`: `ACTIVE_START_HOUR`, `ACTIVE_END_HOUR`,
   `ACTIVE_INTERVAL_MINUTES`, `QUIET_INTERVAL_MINUTES`, or `ADAPTIVE_SCHEDULE=0`
   for a fixed `POLL_INTERVAL_MINUTES`.
+
+## Delivery guarantee (read this before trusting counts)
+
+This bot is **at-least-once**, not exactly-once. There is an irreducible window
+where Telegram accepts a message and the process dies before `markSent()`
+persists it — that tender re-alerts next cycle. Per-tender (non-batched) state
+writes keep the window as small as possible, and graceful shutdown avoids
+creating it deliberately, but it cannot be eliminated. Duplicates are rare and
+harmless; missing alerts would not be, so the design errs this way on purpose.
+
+Search outcomes are reported in three buckets:
+
+| Bucket | Meaning |
+|---|---|
+| **ok** | Scraped and fully processed; completeness verified (or portal-confirmed empty) |
+| **degraded** | Scraped fine, but completeness UNVERIFIED — new tenders still alerted; withdrawal sweep, first-run baseline, and alert cleanup all suppressed |
+| **failed** | Scrape or processing error; nothing aged, nothing baselined |
+
+Three consecutive `degraded` cycles for a search send a ⚠️ (with a ✅ when
+completeness returns) — otherwise a portal change could silently disable
+withdrawal tracking while new-tender alerts kept flowing, looking healthy.
 
 ## Operations (bash on server; PowerShell only for ssh/scp)
 
@@ -328,3 +349,27 @@ test/*.test.js    node:test suite (9)
   store path so runs never touch real `seen.json`. Full suite: 17 pass in
   ~29s (was 143s — the old tests were scraping the live portal). No bot
   behaviour changed; this is a test-and-config-plumbing release.
+- **v10 (27 Jul) — Lifecycle Integrity (review 7).** Four real bugs fixed.
+  **`notifyHealth()` was undefined** — the cleanup-gave-up path threw a
+  ReferenceError instead of warning (contained by per-result isolation, so it
+  surfaced as a failed search); now calls `tryNotifyHealth()` and logs loudly
+  if that delivery also fails. **False recovery messages:** `WARNING_PENDING`
+  (a warning that never reached Telegram) counted as "was warned", so the next
+  success sent a ✅ for a ⚠️ users never saw — pending warnings are now
+  cancelled silently instead. **Best-effort first runs no longer baseline:**
+  `markSearchKnown()` ran unconditionally, so an incomplete first scrape marked
+  the search known and later announced pre-existing tenders (from unread pages)
+  as newly published. **Retirement cleanup now gated on completeness:** it ran
+  on best-effort results, so a re-released tender sitting on an unread page
+  could be tombstoned while live — one `complete` flag now gates sweep,
+  baseline, AND cleanup together. Also: integrity degradation is PERSISTED with
+  its own ⚠️/✅ cycle after 3 consecutive best-effort scrapes (previously an
+  in-memory counter that only logged); `writeHeartbeat()` throws instead of
+  reporting success after a failed write; graceful shutdown finishes the
+  CURRENT search then stops (was: whole cycle) with an 80s deadline under PM2's
+  raised 90s `kill_timeout`, and no forced `process.exit()` on clean shutdown;
+  `STATE_CORRUPTION_POLICY` typos now fail startup instead of silently becoming
+  `recover`; lock liveness falls back to `process.kill(pid, 0)` where `/proc`
+  is absent (Windows/macOS dev). Summary line gains a `degraded` count. Tests:
+  19, including regression guards for the undefined-identifier bug and the
+  policy-typo coercion. Documented the at-least-once delivery guarantee.

@@ -12,6 +12,19 @@ function envInt(name, fallback) {
   }
   return parseInt(raw.trim(), 10);
 }
+function envEnum(name, fallback, allowed) {
+  const raw = process.env[name];
+  if (raw == null || raw === '') return fallback;
+  const value = raw.trim().toLowerCase();
+  if (!allowed.includes(value)) {
+    // Silent coercion is unacceptable for a flag that decides whether
+    // corrupted lifecycle state is accepted — a typo must fail startup.
+    envErrors.push(`${name}="${raw}" must be one of: ${allowed.join(', ')}`);
+    return fallback;
+  }
+  return value;
+}
+
 export function getEnvErrors() {
   return envErrors;
 }
@@ -106,8 +119,7 @@ export const CONFIG = {
   //     2am corruption means ZERO alerts until someone notices.
   // Recovery is the default deliberately: with reliable warning delivery
   // (v9 #1) the operator is told, and availability matters more here.
-  stateCorruptionPolicy:
-    process.env.STATE_CORRUPTION_POLICY === 'halt' ? 'halt' : 'recover',
+  stateCorruptionPolicy: envEnum('STATE_CORRUPTION_POLICY', 'recover', ['recover', 'halt']),
   seenStorePath:
     process.env.SEEN_STORE_PATH ||
     fileURLToPath(new URL('../data/seen.json', import.meta.url)),

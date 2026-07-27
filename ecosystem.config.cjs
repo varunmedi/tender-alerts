@@ -11,7 +11,7 @@ module.exports = {
       autorestart: true,
       restart_delay: 5000,      // breathing room: a crash-loop can't spin at ~1s
       max_memory_restart: '750M',
-      kill_timeout: 30000,
+      kill_timeout: 90000,
       time: true,
       env: { NODE_ENV: 'production', TZ: 'Asia/Kolkata' },
     },

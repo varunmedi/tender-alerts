@@ -104,7 +104,32 @@ test('--once exits nonzero when searches fail (deterministic unreachable portal)
   const dir = tmpDir('tender-exit-');
   const r = run({ SEEN_STORE_PATH: path.join(dir, 'seen.json') });
   assert.equal(r.status, 1, '--once must report failures via exit code');
-  assert.match(r.stdout, /Single run complete: \d+ ok, \d+ failed/);
+  assert.match(r.stdout, /Single run complete: \d+ ok, \d+ degraded, \d+ failed/);
   assert.match(r.stdout, /\d+ failed/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('no undefined identifiers on the cleanup-gave-up path (v10 #1)', async () => {
+  // v9 called notifyHealth() which did not exist -> ReferenceError instead of
+  // the intended ops warning. Assert every notify call resolves to a real
+  // declaration in app.js.
+  const app = fs.readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
+  const called = [...app.matchAll(/\bawait (\w*[Nn]otify\w*)\(/g)].map((m) => m[1]);
+  assert.ok(called.length > 0, 'expected notify calls to exist');
+  for (const name of new Set(called)) {
+    const declared = new RegExp(`(async function|function|const)\\s+${name}\\b`).test(app);
+    assert.ok(declared, `${name}() is called but never declared in app.js`);
+  }
+});
+
+test('invalid STATE_CORRUPTION_POLICY fails startup, not silent coercion (v10 #10)', () => {
+  const dir = tmpDir('tender-policy-');
+  const r = run({
+    SEEN_STORE_PATH: path.join(dir, 'seen.json'),
+    STATE_CORRUPTION_POLICY: 'halts', // typo
+  });
+  const out = (r.stdout || '') + (r.stderr || '');
+  assert.notEqual(r.status, 0, 'a typo must not silently become "recover"');
+  assert.match(out, /must be one of: recover, halt/);
   fs.rmSync(dir, { recursive: true, force: true });
 });

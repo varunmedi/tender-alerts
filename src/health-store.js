@@ -104,15 +104,14 @@ let current = {};
 
 /** Merge a patch into status.json atomically, preserving prior fields. */
 export function writeHeartbeat(patch) {
-  try {
-    current = { ...current, ...patch };
-    fs.mkdirSync(path.dirname(STATUS_PATH), { recursive: true });
-    const tmp = STATUS_PATH + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(current, null, 2));
-    fs.renameSync(tmp, STATUS_PATH);
-  } catch (e) {
-    console.warn(`heartbeat write failed: ${e.message}`);
-  }
+  // THROWS on failure. Persisted-intent code (e.g. "warning-pending" written
+  // before contacting Telegram) must never believe it recorded state that
+  // wasn't written — callers decide how to degrade.
+  current = { ...current, ...patch };
+  fs.mkdirSync(path.dirname(STATUS_PATH), { recursive: true });
+  const tmp = `${STATUS_PATH}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(current, null, 2), 'utf8');
+  fs.renameSync(tmp, STATUS_PATH);
 }
 
 /** Seed the in-memory mirror so writeHeartbeat patches don't drop fields. */

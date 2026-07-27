@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 process.env.TELEGRAM_BOT_TOKEN = 'x';
 process.env.TELEGRAM_CHAT_ID = '-1';
 
-const { canonical, tenderFingerprint, fingerprintChanges } = await import('../src/index.js');
+const { canonical, tenderFingerprint, fingerprintChanges } = await import('../src/app.js');
 const { truncate, clampMessage, formatTenderMessage, isAlreadyCompleted } = await import('../src/notifier.js');
 const { mapHeaders, rowToTenderMapped } = await import('../src/scraper.js');
 
@@ -60,4 +60,29 @@ test('clampMessage strips tags when forced to cut (v7 #8)', async () => {
 test('esc is exported and escapes health-message hazards (v7 #7)', async () => {
   const { esc } = await import('../src/notifier.js');
   assert.equal(esc('waiting for selector "<div> & co"'), 'waiting for selector "&lt;div&gt; &amp; co"');
+});
+
+test('store refuses future version by THROWING, not recovering (v8 #2)', async () => {
+  const s = await import('../src/store.js');
+  assert.equal(typeof s.UnsupportedStoreVersionError, 'function');
+  const e = new s.UnsupportedStoreVersionError(99, 4);
+  assert.equal(e.name, 'UnsupportedStoreVersionError');
+  assert.match(e.message, /99.*4/);
+});
+
+test('updateKnownTender is exported for atomic fp+snapshot (v8 #7)', async () => {
+  const s = await import('../src/store.js');
+  assert.equal(typeof s.updateKnownTender, 'function');
+});
+
+test('health state shape round-trips consecutive failures (v8)', async () => {
+  // Guards the TDZ ordering bug: STATUS_PATH must be initialised before the
+  // health loader reads it, or persisted counters silently load as empty and
+  // a restarting bot never reaches the warn threshold.
+  const src = await import('node:fs');
+  const app = src.readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
+  const statusIdx = app.indexOf('const STATUS_PATH');
+  const loaderIdx = app.indexOf('const failState = loadHealthState()');
+  assert.ok(statusIdx > -1 && loaderIdx > -1);
+  assert.ok(statusIdx < loaderIdx, 'STATUS_PATH must be declared before loadHealthState() runs');
 });

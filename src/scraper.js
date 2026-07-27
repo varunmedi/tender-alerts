@@ -88,8 +88,15 @@ export function mapHeaders(headerCells) {
   const map = {};
   const missing = [];
   for (const [field, aliases] of Object.entries({ ...REQUIRED_HEADERS, ...OPTIONAL_HEADERS })) {
-    const idx = cells.findIndex((c) => aliases.some((a) => c.includes(a)));
-    if (idx >= 0) map[field] = idx;
+    const matches = cells
+      .map((c, i) => (aliases.some((a) => c.includes(a)) ? i : -1))
+      .filter((i) => i >= 0);
+    if (matches.length > 1 && field in REQUIRED_HEADERS) {
+      throw scrapeError(
+        `results table header "${field}" matched ${matches.length} columns — ambiguous schema`
+      );
+    }
+    if (matches.length >= 1) map[field] = matches[0];
     else if (field in REQUIRED_HEADERS) missing.push(field);
   }
   if (missing.length) {
@@ -146,14 +153,44 @@ async function parseResultsTable(page) {
 
 /** DataTables' own reported total ("Showing 1 to 10 of 27 entries"). */
 async function getReportedTotal(page) {
-  // DataTables renders its count in an ".._info" element, but the exact id/
-  // class varies and small result sets omit it. Try several selectors, then
-  // fall back to scanning any "…of N entries" text in the document.
+  // Preferred: DataTables' own API (authoritative; immune to text phrasing).
+  // Fallback: parse the visible info element, whose wording varies by portal
+  // customisation — this portal's element EXISTS (pagination advance detection
+  // relies on its text changing) but doesn't always use the stock
+  // "of N entries" phrasing, which is why v7's strict count check saw null.
+  // Final fallback: null → the caller warns and pages until Next disables.
   return page
     .evaluate(() => {
+      // --- 1. DataTables API ---
+      try {
+        const jq = window.jQuery || window.$;
+        if (jq && jq.fn && jq.fn.dataTable && jq.fn.dataTable.isDataTable('#pagetable13')) {
+          const info = jq('#pagetable13').DataTable().page.info();
+          if (info && Number.isInteger(info.recordsDisplay)) return info.recordsDisplay;
+        }
+      } catch {
+        /* API unavailable or table not initialised — fall through to text */
+      }
+
+      // --- 2. Visible info text, tolerant of several phrasings ---
       const parse = (txt) => {
-        const m = (txt || '').match(/of\s+([\d,]+)\s+entr/i);
-        return m ? parseInt(m[1].replace(/,/g, ''), 10) : null;
+        const t = (txt || '').replace(/\s+/g, ' ');
+        const patterns = [
+          /of\s+([\d,]+)\s+entr/i,        // "of 27 entries"
+          /of\s+([\d,]+)\s+record/i,      // "of 27 records"
+          /of\s+([\d,]+)\s*$/i,           // "Showing 1 to 10 of 27"
+          /of\s+([\d,]+)\s+total/i,       // "of 27 total"
+          /total\s*[:\-]?\s*([\d,]+)/i,   // "Total: 27"
+          /\b([\d,]+)\s+entr(?:y|ies)\b/i, // "27 entries found"
+        ];
+        for (const re of patterns) {
+          const m = t.match(re);
+          if (m) {
+            const n = parseInt(m[1].replace(/,/g, ''), 10);
+            if (Number.isInteger(n)) return n;
+          }
+        }
+        return null;
       };
       const candidates = [
         document.querySelector('#pagetable13_info'),
@@ -164,16 +201,13 @@ async function getReportedTotal(page) {
         const n = parse(el?.textContent);
         if (Number.isInteger(n)) return n;
       }
-      // Last resort: scan text nodes for the DataTables phrasing.
       for (const el of document.querySelectorAll('div, span, td, p')) {
-        if (/of\s+[\d,]+\s+entr/i.test(el.textContent || '')) {
-          const n = parse(el.textContent);
-          if (Number.isInteger(n)) return n;
-        }
+        const n = parse(el.textContent);
+        if (Number.isInteger(n)) return n;
       }
       return null;
     })
-    .catch(() => null);
+    .catch(() => null); // advisory only — never fails a scrape
 }
 
 /**
@@ -191,12 +225,18 @@ async function waitForTenderTable(page, timeoutMs = 20000) {
         const table = document.querySelector('#pagetable13');
         const headers = [...(table?.querySelectorAll('thead th, tr th') || [])]
           .map((c) => (c.textContent || '').toLowerCase().replace(/\s+/g, ' ').trim());
-        let idIdx = headers.findIndex((h) => h.includes('tender id'));
-        if (idIdx < 0) idIdx = 1; // portal's historical position as fallback
+        const idIdx = headers.findIndex((h) => h.includes('tender id'));
         const rows = [...tbody.querySelectorAll('tr')];
+        // Terminal-state detection only: rows are "real" if the mapped ID
+        // column (when the header is found) or ANY cell (when it isn't)
+        // holds a numeric tender ID. No positional assumptions — strict
+        // schema validation belongs to the header-mapped parser, which
+        // throws a proper error if required headers are missing.
         const hasRows = rows.some((row) => {
-          const cells = row.querySelectorAll('td');
-          return cells.length >= 3 && /^\d{4,}$/.test((cells[idIdx]?.textContent || '').trim());
+          const cells = [...row.querySelectorAll('td')];
+          if (cells.length < 3) return false;
+          if (idIdx >= 0) return /^\d{4,}$/.test((cells[idIdx]?.textContent || '').trim());
+          return cells.some((td) => /^\d{4,}$/.test((td.textContent || '').trim()));
         });
         if (hasRows) return 'rows';
         const text = (tbody.textContent || '').toLowerCase();
@@ -229,13 +269,22 @@ async function collectAllPages(page, maxPages = 50) {
   // (it did — v7 broke 3 working searches). We therefore require the total
   // ONLY when pagination is present, since that's the only case where a
   // missing/unparseable count could hide truncated results.
-  const isPaginated = await page
-    .evaluate(() => {
+  // Evaluation failure here must NEVER read as "not paginated" — that would
+  // fail open and let a partial single page pass as complete. Only a real,
+  // successful evaluation may report the pagination state.
+  let isPaginated;
+  try {
+    isPaginated = await page.evaluate(() => {
       const next = document.querySelector('#pagetable13_next');
       return !!next && !next.classList.contains('disabled');
-    })
-    .catch(() => false);
+    });
+  } catch (e) {
+    throw scrapeError(`could not evaluate pagination state: ${e.message}`, true);
+  }
 
+  if (Number.isInteger(reportedTotal)) {
+    console.log(`  (portal reports ${reportedTotal} total entries — count cross-check armed)`);
+  }
   if (isPaginated && !Number.isInteger(reportedTotal)) {
     // The count element isn't reliably present on this portal even when
     // paginated. Rather than fail good data, fall back to the proven
@@ -267,18 +316,29 @@ async function collectAllPages(page, maxPages = 50) {
     // Advance-detection via the DataTables info text ("Showing 11 to 20 of
     // 27 entries") — robust against two pages starting with the same ID and
     // free of any hardcoded column position.
-    const previousInfo = await page
-      .evaluate(() => document.querySelector('#pagetable13_info')?.textContent.trim() ?? null)
-      .catch(() => null);
+    let previousInfo;
+    try {
+      // A missing info element legitimately yields null (advisory count);
+      // only an evaluation FAILURE throws.
+      previousInfo = await page.evaluate(
+        () => document.querySelector('#pagetable13_info')?.textContent.trim() ?? null
+      );
+    } catch (e) {
+      throw scrapeError(`pagination info evaluation failed: ${e.message}`, true);
+    }
 
-    const advanced = await page
-      .evaluate(() => {
+    let advanced;
+    try {
+      advanced = await page.evaluate(() => {
         const next = document.querySelector('#pagetable13_next');
         if (!next || next.classList.contains('disabled')) return false;
         next.click();
         return true;
-      })
-      .catch(() => false);
+      });
+    } catch (e) {
+      // "Next legitimately disabled" is healthy; an evaluation FAILURE is not.
+      throw scrapeError(`pagination click evaluation failed: ${e.message}`, true);
+    }
 
     if (!advanced) {
       // Verify against the portal's own count when we have it; a single-page
@@ -715,6 +775,13 @@ export async function* scrapeSearchesStream(searches) {
       ],
     });
   let browser;
+  const ensureBrowser = async () => {
+    if (!browser || !browser.isConnected()) {
+      await browser?.close().catch(() => {});
+      console.warn('browser process not connected — (re)launching Chromium…');
+      browser = await launchBrowser();
+    }
+  };
   try {
   browser = await launchBrowser();
   // Each search runs in its OWN fresh context (isolated cookies, session, and
@@ -725,9 +792,9 @@ export async function* scrapeSearchesStream(searches) {
   // bug) — every search starts from a clean slate.
   const newSearchContext = async () => {
     const context = await browser.newContext({
-      userAgent:
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-        '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+      // No hardcoded userAgent: let Playwright send the UA of its actual
+      // bundled Chromium, so the reported version matches the real engine.
+      // (Override only if the portal ever demonstrates a UA requirement.)
       ...(CONFIG.headed ? { viewport: null } : { viewport: { width: 1920, height: 1080 } }),
       locale: 'en-IN',
       timezoneId: 'Asia/Kolkata',
@@ -777,20 +844,21 @@ export async function* scrapeSearchesStream(searches) {
     let result;
     try {
       // One Chromium crash must not doom the remaining searches: relaunch.
-      if (!browser.isConnected()) {
-        console.warn('browser process disconnected — relaunching Chromium…');
-        browser = await launchBrowser();
-      }
+      await ensureBrowser();
       const postCaptures = []; // per-search: no cross-talk between searches
       let outcome;
       try {
         outcome = await attemptSearch(search, postCaptures);
       } catch (e) {
         // ONE same-cycle retry in a brand-new context — transient only.
-        // Config/schema errors (dept not found, ambiguous, headers,
-        // POST-mismatch) are surfaced immediately, never retried blindly.
-        if (!e.transient) throw e;
+        // Browser-process death ("Target closed" etc.) counts as retryable:
+        // it says nothing about the search config, only about Chromium.
+        const browserDied = /target closed|browser has been closed|connection closed/i.test(
+          e.message || ''
+        );
+        if (!e.transient && !browserDied) throw e;
         console.warn(`[${search.id}] transient failure (${e.message}) — retrying with fresh context…`);
+        await ensureBrowser(); // relaunch BEFORE the retry, or it dies in the dead browser
         outcome = await attemptSearch(search, []);
       }
       const { status, tenders } = outcome;

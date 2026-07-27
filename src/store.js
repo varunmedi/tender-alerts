@@ -31,6 +31,15 @@ const NOTIFY_MAX_ATTEMPTS = 5;
 
 export let storeLoadWarning = null;
 
+/** Future-version refusal must BYPASS corruption recovery: an older deploy
+ *  must terminate, not quietly re-baseline over a newer state file. */
+export class UnsupportedStoreVersionError extends Error {
+  constructor(found, supported) {
+    super(`state version ${found} is newer than supported ${supported} — refusing to run`);
+    this.name = 'UnsupportedStoreVersionError';
+  }
+}
+
 function searchIdsFromKeys(tenders) {
   const ids = new Set();
   for (const key of Object.keys(tenders)) {
@@ -45,9 +54,7 @@ function migrate(raw) {
   // Refuse FUTURE versions: an older deployment must never rewrite a newer
   // state file and silently drop fields it doesn't understand.
   if (Number.isInteger(raw.version) && raw.version > STORE_VERSION) {
-    throw new Error(
-      `state version ${raw.version} is newer than supported ${STORE_VERSION} — refusing to load`
-    );
+    throw new UnsupportedStoreVersionError(raw.version, STORE_VERSION);
   }
 
   // v1: flat array of keys
@@ -79,11 +86,18 @@ function validateStore(st) {
   if (typeof st.tenders !== 'object' || Array.isArray(st.tenders)) bad.push('tenders');
   if (typeof st.retired !== 'object' || Array.isArray(st.retired)) bad.push('retired');
   if (!Array.isArray(st.searches) || st.searches.some((x) => typeof x !== 'string')) bad.push('searches');
-  for (const m of Object.values(st.tenders || {})) {
+  const isIso = (v) => typeof v === 'string' && Number.isFinite(Date.parse(v));
+  for (const [k, m] of Object.entries(st.tenders || {})) {
+    if (!m || typeof m !== 'object') { bad.push(`tenders[${k}] not an object`); continue; }
     if (!Number.isInteger(m.missing) || m.missing < 0) bad.push('tenders.missing');
+    if (!isIso(m.lastSeen)) bad.push('tenders.lastSeen');
+    if (m.msgId != null && !Number.isInteger(m.msgId)) bad.push('tenders.msgId');
   }
-  for (const r of Object.values(st.retired || {})) {
+  for (const [k, r] of Object.entries(st.retired || {})) {
+    if (!r || typeof r !== 'object') { bad.push(`retired[${k}] not an object`); continue; }
     if (!['pending', 'done', 'failed'].includes(r.notify)) bad.push('retired.notify');
+    if (!isIso(r.retiredAt)) bad.push('retired.retiredAt');
+    if (!Number.isInteger(r.attempts) || r.attempts < 0) bad.push('retired.attempts');
   }
   if (bad.length) throw new Error(`schema invalid: ${[...new Set(bad)].join(', ')}`);
   return st;
@@ -102,6 +116,7 @@ function load() {
   try {
     return validateStore(migrate(JSON.parse(text)));
   } catch (error) {
+    if (error instanceof UnsupportedStoreVersionError) throw error; // no recovery
     // Malformed JSON / invalid schema: preserve evidence, start fresh, warn.
     try {
       const backup = `${CONFIG.seenStorePath}.corrupt-${Date.now()}`;
@@ -167,11 +182,17 @@ export function getFingerprint(key) {
 }
 
 /** Update a known tender's fingerprint (call after alerting the update). */
-export function setFingerprint(key, fp) {
+export function updateKnownTender(key, { fp, snapshot }) {
   const meta = store.tenders[key];
   if (!meta) return;
-  meta.fp = fp;
+  if (fp !== undefined) meta.fp = fp;
+  if (snapshot !== undefined) meta.snapshot = snapshot; // stays current for tombstones
+  meta.lastSeen = new Date().toISOString();
   save();
+}
+
+export function setFingerprint(key, fp) {
+  updateKnownTender(key, { fp });
 }
 
 // ---------------- retirement / withdrawal ----------------

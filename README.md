@@ -1,4 +1,4 @@
-# AP Tender Alerts → Telegram — Varun's Ops Guide (v7.1)
+# AP Tender Alerts → Telegram — Varun's Ops Guide (v8)
 
 Self-hosted bot watching the AP eProcurement portal on an adaptive IST schedule.
 Alerts the **"Tenders"** Telegram group on new (🔔), re-released (🔁), and amended
@@ -7,7 +7,7 @@ Oracle Cloud Always Free (Hyderabad). ₹0/month.
 
 **Production state (verified 25 Jul 2026):** Node 24.18.0 LTS · Playwright 1.61 ·
 per-search isolated sessions · full 4-search cycle ≈ **34s** · POST-verified
-filters · **12-test suite + CI workflow** · crash/reboot recovery live-verified.
+filters · **15-test suite + CI workflow** · crash/reboot recovery live-verified.
 
 ## Tech stack
 
@@ -120,6 +120,14 @@ npm run debug     # artifacts, headless (server-safe) · npm run headed = laptop
 pm2 flush tender-alerts   # clear historical log noise after deploys
 ```
 
+- **Health heartbeat:** `cat data/status.json` — last cycle times, duration,
+  per-search `consecutiveFailures` / `lastSuccessAt` / `lastError` /
+  `lastTenderCount`. Counters are DURABLE across restarts, so a repeatedly
+  restarting bot still reaches the 6-failure ⚠️ threshold.
+- **Optional PM2 config:** `ecosystem.config.cjs` documents the verified fork
+  mode plus `max_memory_restart: 750M` and `restart_delay: 5000` (a crash-loop
+  can't spin at ~1s). Adopt with `pm2 delete tender-alerts && pm2 start
+  ecosystem.config.cjs && pm2 save`.
 - Deploy code: `scp -i keys\private\ssh-key-2026-07-13.key .\src\<file>.js ubuntu@140.245.246.22:~/ap-tender-alerts/src/` → restart
 - After changing `package.json`: `rm -rf node_modules package-lock.json && npm install`
   **and then `npx playwright install chromium`** — wiping node_modules orphans
@@ -153,6 +161,8 @@ pm2 flush tender-alerts   # clear historical log noise after deploys
 ## File map
 
 ```
+src/index.js      executable wrapper ONLY (PM2 entrypoint) — no guard needed
+src/app.js        all logic + test exports: lock, scheduler, lifecycle, health
 src/config.js     searches WITH portal IDs; schedule; strict envInt; validation
 src/scraper.js    per-search isolated contexts; POST guard; verified pagination;
                   header-mapped parse; ambiguity detection; marker navigation
@@ -227,3 +237,36 @@ test/*.test.js    node:test suite (9)
   all four searches `4 ok, 0 failed`, GVMC-Electrical extracts 15 via the
   fallback, PM2 stable at restarts 0. README: explicit Sunday/adaptive-schedule
   section; count-check wording corrected to match shipped behaviour.
+- **v8 (27 Jul) — Integrity & Observability (review 5).** Review caught three
+  places where v7's summary overclaimed. Fixed: **future store versions now
+  truly refuse** (a dedicated `UnsupportedStoreVersionError` bypasses the
+  corruption-recovery path that was silently backing up and re-baselining —
+  defeating the very check it was meant to enforce); **Chromium relaunches
+  BEFORE the retry** (the retry previously reused a dead browser) with
+  target/connection-closed messages classified transient; **amendment writes
+  `fp` + `snapshot` atomically** (a title change no longer leaves a stale
+  tombstone); deeper per-entry store validation (null entries, ISO dates,
+  msgId/attempts) so a malformed entry can't TypeError into a full reset;
+  positional Tender-ID fallback removed in favour of position-agnostic row
+  detection; duplicate-required-header ambiguity fails closed; evaluation
+  failures in pagination no longer read as "not paginated" (fail-open path
+  closed). **Count source upgraded:** DataTables `page.info()` API preferred,
+  then tolerant text patterns (this portal's info element exists — advance
+  detection depends on it — but doesn't always use the stock "of N entries"
+  wording, which is why v7 saw null); still ADVISORY with page-until-disabled
+  fallback, because three field regressions proved fail-hard assumptions about
+  this portal break real scrapes. **Entry-point guessing eliminated:** logic
+  split into `app.js`, `src/index.js` is a bare executable wrapper — no
+  `import.meta.main`, no `NODE_TEST_CONTEXT`; verified running under both PM2
+  fork-wrapper and direct node. **Persistent health:** `data/status.json`
+  heartbeat with durable per-search failure counters (in-memory counters reset
+  on restart, so a restart-looping bot could never reach the warn threshold —
+  the blind spot that hid the 22k loop); edge-triggered warn/recovery. Added
+  `ecosystem.config.cjs`; 15 tests (incl. a guard against the TDZ ordering bug
+  found while building the persistence). REJECTED: replacing the Chrome-126
+  user agent (cosmetic, and perturbing a working anti-tamper interaction is
+  pure downside). DEFERRED with rationale: Playwright fixture tests — Chromium
+  is unavailable in the authoring sandbox, and shipping unrunnable test code
+  is worse than none; they remain the largest real gap.
+  Repo actions still yours: commit the regenerated `package-lock.json`, add
+  `.github/workflows/ci.yml`, push the current README, rotate credentials.

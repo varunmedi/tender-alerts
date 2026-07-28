@@ -5,7 +5,7 @@ Alerts the **"Tenders"** Telegram group on new (🔔), re-released (🔁), and a
 (📝) tenders; withdrawn tenders' alerts are deleted or edited into ❌ tombstones.
 Oracle Cloud Always Free (Hyderabad). ₹0/month.
 
-**Production state (verified 25 Jul 2026):** Node 24.18.0 LTS · Playwright 1.61 ·
+**Production state (verified 28 Jul 2026):** Node 24.18.0 LTS · Playwright 1.61 ·
 per-search isolated sessions · full 4-search cycle ≈ **34s** · POST-verified
 filters · **22-test suite (incl. real child-process integration tests) + CI** · crash/reboot recovery live-verified.
 
@@ -21,9 +21,9 @@ filters · **22-test suite (incl. real child-process integration tests) + CI** �
 | State | JSON v4 (`data/seen.json`): atomic writes, schema validation, corrupt-file backup + group warning, I/O errors fail loud |
 | Concurrency | Overlap guard + atomic lock directory (mkdir + owner token) |
 | Process mgmt | PM2 + systemd + pm2-logrotate |
-| Tests | `npm test` → node:test, 9 tests |
+| Tests | `npm test` → node:test, 22 tests |
 
-Stack verdict (3 external reviews concur): Node+Playwright+JSON optimal.
+Stack verdict (8 external reviews concur): Node+Playwright+JSON optimal.
 
 ## Watched searches (src/config.js — now with verified portal IDs)
 
@@ -40,7 +40,7 @@ search without numeric `deptId`/`subDeptId` refuses to start, so the guard
 can never be silently unarmed). When adding a search: temporarily set the IDs
 after one `--debug` run by reading the `POST (auto):` log line.
 
-## Filter integrity (v6.1 — three layers)
+## Filter integrity (three layers)
 
 1. **Isolation (prevention):** each search runs in a brand-new browser context —
    no cookies, form state, or `#subDeptId` options can leak from a previous
@@ -74,7 +74,7 @@ SessionTimeOut.jsp.
 🔔 new · 🔁 re-released · 📝 updated (original alert also edited in place) ·
 ❌ withdrawn tombstone (>47h) · *(deleted)* withdrawn (<47h) · ⚠️/✅ health.
 
-## Result states
+## Scrape status (what the scraper returns per search)
 
 | Status | Meaning | Healthy | Baseline | Sweep |
 |---|---|---|---|---|
@@ -82,7 +82,7 @@ SessionTimeOut.jsp.
 | `empty` | Portal explicitly: "No matching records" (POST verified) | yes | yes | yes |
 | `error` | Anything else — incl. timeouts, POST mismatch, pagination integrity | no | no | no |
 
-## Safety guarantees (v6 + v6.1)
+## Safety guarantees
 
 - Pagination pages until the Next control disables, deduping by tender ID;
   when the portal exposes a DataTables total it is cross-checked (mismatch =
@@ -119,7 +119,9 @@ writes keep the window as small as possible, and graceful shutdown avoids
 creating it deliberately, but it cannot be eliminated. Duplicates are rare and
 harmless; missing alerts would not be, so the design errs this way on purpose.
 
-Search outcomes are reported in three buckets:
+Search outcomes are reported in three **summary buckets** (distinct from the
+per-scrape status table above: that one describes what the scraper returned,
+this one describes how the orchestrator counted it):
 
 | Bucket | Meaning |
 |---|---|
@@ -198,16 +200,15 @@ pm2 flush tender-alerts   # clear historical log noise after deploys
 
 ```
 src/index.js      executable wrapper ONLY (PM2 entrypoint) — no guard needed
-src/app.js        all logic + test exports: lock, scheduler, lifecycle, health
+src/app.js        all logic + test exports: atomic lock, IST scheduler,
+                  lifecycle, health/integrity state machines, exit codes
 src/health-store.js  validated status.json I/O (ENOENT/corrupt/IO distinct)
 src/config.js     searches WITH portal IDs; schedule; strict envInt; validation
 src/scraper.js    per-search isolated contexts; POST guard; verified pagination;
                   header-mapped parse; ambiguity detection; marker navigation
 src/store.js      v4 store; snapshots; corrupt-backup; IO fail-loud
 src/notifier.js   TelegramError; idempotency; truncation; 🔔🔁📝❌
-src/index.js      atomic lock; 4-state whitelist; isolation; race guard;
-                  edit-on-amend; IST Intl; exit codes
-test/*.test.js    node:test suite (9)
+test/*.test.js    node:test suite (22) — logic + child-process integration
 ```
 
 ## Changelog

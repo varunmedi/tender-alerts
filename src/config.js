@@ -139,6 +139,11 @@ export const CONFIG = {
   // Playwright timeouts (ms). The portal can be slow — be generous.
   navTimeout: envInt('NAV_TIMEOUT_MS', 60_000),
   actionTimeout: 20_000,
+  // Pagination page-transition wait. Was hardcoded 5s — wildly tight next to
+  // the 20s table wait and 60s navigation timeout, and the direct cause of
+  // "portal reports N entries, collected 10" failures during the portal's
+  // slow spells (a DataTables advance can involve a server round-trip).
+  paginationTimeout: envInt('PAGINATION_TIMEOUT_MS', 20_000),
 };
 
 export function assertConfig() {

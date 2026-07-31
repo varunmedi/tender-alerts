@@ -66,3 +66,19 @@ test('updateKnownTender is exported for atomic fp+snapshot (v8 #7)', async () =>
   const s = await import('../src/store.js');
   assert.equal(typeof s.updateKnownTender, 'function');
 });
+
+test('scraper has no undefined function calls (v11.1 guard)', async () => {
+  // Same bug class as the undefined notifyHealth(): a helper referenced but
+  // never declared only fails at RUNTIME, on a rare path.
+  const fs = await import('node:fs');
+  const src = fs.readFileSync(new URL('../src/scraper.js', import.meta.url), 'utf8');
+  const called = [...src.matchAll(/\bawait (get\w+|wait\w+|submit\w+|select\w+)\(/g)].map((m) => m[1]);
+  for (const name of new Set(called)) {
+    const declared = new RegExp(`(async function|function|const)\\s+${name}\\b`).test(src);
+    // A name can also be legitimately supplied as a PARAMETER (e.g.
+    // submitAndAwaitNewDocument(page, submitFn, timeout)) — that's declared
+    // too, just not at module scope.
+    const isParam = new RegExp(`function\\s+\\w+\\([^)]*\\b${name}\\b`).test(src);
+    assert.ok(declared || isParam, `${name}() is called in scraper.js but never declared`);
+  }
+});

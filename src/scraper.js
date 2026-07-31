@@ -282,6 +282,33 @@ async function waitForTenderTable(page, timeoutMs = 20000) {
   }
 }
 
+/**
+ * Composite pagination marker: DataTables API page index (strongest) →
+ * visible info text → first-rows signature. Relying on the info element alone
+ * meant a successful advance looked like a failure whenever that optional
+ * element was absent, renamed, or not repainted.
+ */
+async function getPaginationMarker(page) {
+  return page.evaluate(() => {
+    const jq = window.jQuery || window.$;
+    try {
+      if (jq?.fn?.dataTable?.isDataTable('#pagetable13')) {
+        const i = jq('#pagetable13').DataTable().page.info();
+        return `api:${i.page}:${i.start}:${i.end}`;
+      }
+    } catch {
+      /* fall through to DOM markers */
+    }
+    const infoText =
+      document.querySelector('#pagetable13_info')?.textContent?.trim() || '';
+    const rowSignature = [...document.querySelectorAll('#pagetable13 tbody tr')]
+      .slice(0, 3)
+      .map((r) => r.textContent.trim())
+      .join('|');
+    return `dom:${infoText}::${rowSignature}`;
+  });
+}
+
 async function collectAllPages(page, maxPages = 50) {
   const all = [];
   const byId = new Map();
@@ -337,30 +364,9 @@ async function collectAllPages(page, maxPages = 50) {
       }
     }
 
-    // COMPOSITE advance marker: DataTables API page index (strongest) →
-    // visible info text → first-rows signature. Relying on the info element
-    // alone meant a successful advance looked like a failure whenever that
-    // optional element was absent, renamed, or not repainted.
     let previousMarker;
     try {
-      previousMarker = await page.evaluate(() => {
-      const jq = window.jQuery || window.$;
-      try {
-        if (jq?.fn?.dataTable?.isDataTable('#pagetable13')) {
-          const i = jq('#pagetable13').DataTable().page.info();
-          return `api:${i.page}:${i.start}:${i.end}`;
-        }
-      } catch {
-        /* fall through to DOM markers */
-      }
-      const infoText =
-        document.querySelector('#pagetable13_info')?.textContent?.trim() || '';
-      const rowSignature = [...document.querySelectorAll('#pagetable13 tbody tr')]
-        .slice(0, 3)
-        .map((r) => r.textContent.trim())
-        .join('|');
-      return `dom:${infoText}::${rowSignature}`;
-      });
+      previousMarker = await getPaginationMarker(page);
     } catch (e) {
       throw scrapeError(`pagination marker evaluation failed: ${e.message}`, true);
     }
@@ -414,12 +420,27 @@ async function collectAllPages(page, maxPages = 50) {
       const cur = `dom:${infoText}::${rowSignature}`; return cur !== prev;
         },
         previousMarker,
-        { timeout: 5000 }
+        { timeout: CONFIG.paginationTimeout }
       )
       .then(() => true)
       .catch(() => false);
+
     if (!advancedOk) {
-      throw scrapeError(`pagination failed to advance after page ${pageNumber}`, true);
+      // Final check before failing: the transition may have completed while
+      // we were between polls (slow portal). Re-read the marker directly —
+      // we must NOT re-click Next, which would skip a page entirely.
+      const nowMarker = await getPaginationMarker(page).catch(() => null);
+      if (nowMarker && nowMarker !== previousMarker) {
+        console.warn(
+          `  (page ${pageNumber} advance detected late — continuing)`
+        );
+      } else {
+        throw scrapeError(
+          `pagination failed to advance after page ${pageNumber} ` +
+            `(waited ${CONFIG.paginationTimeout}ms)`,
+          true
+        );
+      }
     }
   }
   throw scrapeError(`pagination exceeded ${maxPages} pages; refusing partial results`, true);

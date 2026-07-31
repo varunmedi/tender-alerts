@@ -1,4 +1,4 @@
-# AP Tender Alerts → Telegram — Varun's Ops Guide (v11)
+# AP Tender Alerts → Telegram — Varun's Ops Guide (v11.1)
 
 Self-hosted bot watching the AP eProcurement portal on an adaptive IST schedule.
 Alerts the **"Tenders"** Telegram group on new (🔔), re-released (🔁), and amended
@@ -7,7 +7,7 @@ Oracle Cloud Always Free (Hyderabad). ₹0/month.
 
 **Production state (verified 28 Jul 2026):** Node 24.18.0 LTS · Playwright 1.61 ·
 per-search isolated sessions · full 4-search cycle ≈ **34s** · POST-verified
-filters · **22-test suite (incl. real child-process integration tests) + CI** · crash/reboot recovery live-verified.
+filters · **23-test suite (incl. real child-process integration tests) + CI** · crash/reboot recovery live-verified.
 
 ## Tech stack
 
@@ -158,6 +158,11 @@ pm2 flush tender-alerts   # clear historical log noise after deploys
   UNSET (real portal, 60s). They exist so the test suite can force a fast,
   deterministic scrape failure against an unreachable host — independent of
   whether the real portal is reachable from wherever the tests run.
+- **`PAGINATION_TIMEOUT_MS`** (`.env`, optional, default 20000): how long to
+  wait for a DataTables page advance. Only GVMC-Electrical paginates (the
+  others have too few tenders). Raise it if you see recurring
+  `pagination integrity failure: portal reports N, collected M` warnings
+  during normal (non-outage) portal latency.
 - **Health heartbeat:** `cat data/status.json` — last cycle times, duration,
   per-search `consecutiveFailures` / `lastSuccessAt` / `lastError` /
   `lastTenderCount`. Counters are DURABLE across restarts, so a repeatedly
@@ -192,6 +197,15 @@ pm2 flush tender-alerts   # clear historical log noise after deploys
 - **"paging until Next disables (count cross-check skipped)"** → informational,
   NOT an error: this portal often omits its count element even when paginated
   (GVMC-Electrical logs this every cycle) — all tenders are still collected.
+- **Occasional `N ok, 1 failed` with NO ⚠️ in the group** → normal. A single
+  search failing one cycle (portal slow spell, brief unreachability) is
+  handled fail-closed: nothing aged, retired, or sent; it retries next cycle.
+  Only a **⚠️ health alert** (same search failing 6 cycles ≈ 1.5 h) needs
+  action. Don't chase isolated `1 failed` counts — trust the ⚠️/✅ alerts.
+- **⚠️ `portal navigation failed: page.goto: Timeout 60000ms exceeded`** → the
+  AP portal itself was slow/unreachable (not a bug). The bot warns, keeps all
+  state safe, and sends ✅ on recovery. If outage alerts get noisy, raise
+  `FAIL_NOTIFY_AT` in app.js (6 → 10 ≈ 2.5 h before alerting).
 - **"Another instance holds bot.lock"** → stop PM2 for manual runs.
 - State corruption → auto-backup `seen.json.corrupt-<ts>` + ⚠️ to group; I/O
   errors intentionally crash. Old error-log noise → `pm2 flush`.
@@ -404,3 +418,19 @@ test/*.test.js    node:test suite (22) — logic + child-process integration
   shipping unverifiable test code is worse than shipping none.
   Repo actions still yours: regenerate/commit `package-lock.json`, push CI
   workflow + README, rotate credentials.
+- **v11.1 (30 Jul) — field-tuned pagination timeout.** Live ⚠️ alerts showed
+  GVMC-Electrical intermittently failing with `pagination integrity failure:
+  portal reports 13 entries, collected 10` — the DataTables page-advance wait
+  was a hardcoded 5s, the lone outlier beside the 20s table wait and 60s
+  navigation timeout, and far too tight during the portal's slow spells. Raised
+  to 20s (env-tunable `PAGINATION_TIMEOUT_MS`) with a late-advance grace check
+  (re-reads the marker once before failing; never re-clicks Next). While
+  fixing, extracted the composite marker into a named `getPaginationMarker()`
+  helper — the patch had first referenced it as if it existed (the same
+  undefined-identifier class as v10's `notifyHealth`), so added a test that
+  scans scraper.js for called-but-undeclared functions. 23 tests. The separate
+  60s `page.goto` timeout in the same alert screenshot was a genuine ~3-hour
+  AP portal outage — correctly detected, warned, and auto-recovered; no code
+  fix applies to an unreachable server. Fail-closed behaviour confirmed
+  working live: partial page (10/13) was REFUSED, not swept, so no false
+  withdrawals occurred during the slow period.
